@@ -13,4 +13,6 @@ NES-style 8-bit platformer for the MOC booth at NADA Show 2027. One self-contain
 - Music, sound, sprites and the level are original. "SUPER MOC BROS." is a parody title; legal sign-off pending before public launch.
 
 ## Controls
-Arrows/WASD move, Z or Space jump, X or Shift run/spray, Enter start/pause. Gamepads and USB arcade encoders work automatically (Shift+G for button setup). Touch controls appear on phones and tablets.
+NES layout: A jumps (tap for a short hop, hold to jump higher), B runs and sprays.
+
+Keyboard: arrows/WASD move, X or Space = A (jump), Z or Shift = B (run/spray), Enter start/pause. Arcade encoders (MAME keys): Left Alt = A, Left Ctrl = B, 1 start. Gamepads: the right face button (A on Nintendo-style pads) jumps, the bottom face button (B) runs; Shift+G for button setup. Touch controls appear on phones and tablets.
