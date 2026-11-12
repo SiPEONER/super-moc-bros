@@ -882,6 +882,12 @@ const KEY={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:
    J = B, K = A. Last row: arcade keyboard encoders (MAME defaults): button 1 (left, Left Ctrl) = B,
    button 2 (right, Left Alt) = A, then P1 start and coin. */
 const kb={}, latch={}, tch={}, gp={}, IN={}, PREV={};
+/* Title hint follows the device: A/B wording once a controller (or an arcade encoder's keys) is in use,
+   keyboard keys otherwise. Remembered per machine, because browsers only report a gamepad after its
+   first button press, so a booth PC would otherwise show the keyboard line after every restart. */
+const ARCADE_KEYS=new Set(['ControlLeft','AltLeft','Digit1','Digit5']), HINT_KEY='moc-service-drive-hint-ab';
+let padLive=false, hintAB=(()=>{ try{ return localStorage.getItem(HINT_KEY)==='1'; }catch(e){ return false; } })();
+function setHintAB(v){ if(hintAB===v) return; hintAB=v; try{ localStorage.setItem(HINT_KEY,v?'1':'0'); }catch(e){} }
 let lastInput=0, frame=0;
 addEventListener('keydown',e=>{
   auInit();
@@ -892,6 +898,7 @@ addEventListener('keydown',e=>{
   if(e.code==='Escape'&&state==='padcfg'){ setState('title'); return; }
   if(e.code==='Backspace'&&e.shiftKey&&!e.repeat){ clearScoresRequest(); e.preventDefault(); return; }
   const k=KEY[e.code]; if(!k) return; e.preventDefault();
+  if(ARCADE_KEYS.has(e.code)) setHintAB(true); else if(!padLive) setHintAB(false);
   if(!kb[k]) latch[k]=true; kb[k]=true; if(k==='up'){ if(!kb.kup) latch.kup=true; kb.kup=true; }
   lastInput=frame;
 });
@@ -909,6 +916,7 @@ function pollPad(){
   for(const k of BTN) gp[k]=false;
   const pads=navigator.getGamepads?navigator.getGamepads():[];
   const rawNow=[];
+  padLive=false; for(const p of pads) if(p){ padLive=true; setHintAB(true); }
   for(const p of pads){ if(!p) continue; const b=i=>!!(p.buttons[i]&&p.buttons[i].pressed);
     const ax=p.axes[0]||0, ay=p.axes[1]||0;
     if(b(14)||ax<-0.45) gp.left=true; if(b(15)||ax>0.45) gp.right=true;
@@ -1507,7 +1515,7 @@ function drawTitle(){
   const mx=W/2-64;
   text('1 PARTNER GAME',mx+14,148,{shadow:true});
   ctx.drawImage(MINI_DROP.n,mx+2,148);
-  text(touchMode?'A JUMP   B RUN // SPRAY':'ARROWS MOVE  X JUMP  Z RUN // SPRAY',W/2,170,{align:'c',thin:true,shadow:true});
+  text((touchMode||hintAB)?'A JUMP   B RUN // SPRAY':'ARROWS MOVE  X JUMP  Z RUN // SPRAY',W/2,170,{align:'c',thin:true,shadow:true});
   const k=['w1','w2','w3'][Math.floor(titleRunner.anim)%3];
   ctx.drawImage(PS[k].n,Math.round(titleRunner.x),192);
   ctx.drawImage(SLUDGE[Math.floor(stT/10)%2].n,Math.round(titleRunner.x)-44,193);
@@ -1639,7 +1647,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden&&state==='
 buildLevel(); P=newPlayer(3); setState('title'); requestAnimationFrame(loop);
 
 /* test hook for automated play-testing (read-only state plus a warp) */
-window.__moc={ go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
+window.__moc={ hint(){ return hintAB; }, go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
   far(){ return FAR.toDataURL(); },
   coins(){ const c=document.createElement('canvas'); c.width=60; c.height=18; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,60,18); DROP.forEach((d,i)=>g.drawImage(d.n,2+i*12,2)); g.drawImage(MINI_DROP.n,50,5); return c.toDataURL(); },
   zoom(){ const c=document.createElement('canvas'); c.width=96; c.height=34; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,96,34); g.drawImage(AEROSOL.n,4,4); g.drawImage(CONE.n,24,14); g.drawImage(PS_OUTLINED.n,44,10); g.fillStyle='#000'; g.fillRect(64,0,32,34); g.drawImage(PS_OUTLINED.n,72,10); return c.toDataURL(); },
