@@ -1033,9 +1033,74 @@ let hiscores=loadHS();
 function loadHS(){ try{ const s=JSON.parse(localStorage.getItem(HS_KEY)); if(Array.isArray(s)&&s.length) return s.slice(0,10); }catch(e){} return HS_DEFAULT.map(x=>x.slice()); }
 function saveHS(){ try{ localStorage.setItem(HS_KEY,JSON.stringify(hiscores)); }catch(e){} }
 function qualifies(s){ return s>0 && (hiscores.length<10 || s>hiscores[hiscores.length-1][1]); }
+const TIMES_KEY='moc-service-drive-times-v1';
+let besttimes=(()=>{ try{ const t=JSON.parse(localStorage.getItem(TIMES_KEY)); if(Array.isArray(t)) return t.slice(0,10); }catch(e){} return []; })();
+function saveTimes(){ try{ localStorage.setItem(TIMES_KEY,JSON.stringify(besttimes)); }catch(e){} }
+function qualifiesTime(f){ return f>0 && (besttimes.length<10 || f<besttimes[besttimes.length-1][1]); }
+function insertScore(name,v){ hiscores.push([name,v]); hiscores.sort((a,b)=>b[1]-a[1]); hiscores=hiscores.slice(0,10); return hiscores.findIndex(h=>h[0]===name&&h[1]===v); }
+function insertTime(name,v){ besttimes.push([name,v]); besttimes.sort((a,b)=>a[1]-b[1]); besttimes=besttimes.slice(0,10); return besttimes.findIndex(h=>h[0]===name&&h[1]===v); }
 let clearReqT=0;
-function clearScoresRequest(){ if(frame-clearReqT<150){ hiscores=HS_DEFAULT.map(x=>x.slice()); saveHS(); notice='SCORES RESET'; noticeT=150; clearReqT=0; } else { clearReqT=frame; notice='SHIFT+BACKSPACE AGAIN TO RESET SCORES'; noticeT=150; } }
+function clearScoresRequest(){ if(LB.shared()){ notice='RESET THIS BOARD ON THE STAFF PAGE'; noticeT=180; return; }
+  if(frame-clearReqT<150){ hiscores=HS_DEFAULT.map(x=>x.slice()); saveHS(); besttimes=[]; saveTimes(); notice='SCORES RESET'; noticeT=150; clearReqT=0; } else { clearReqT=frame; notice='SHIFT+BACKSPACE AGAIN TO RESET SCORES'; noticeT=150; } }
 let notice='', noticeT=0;
+
+/* ---------------- shared leaderboards ----------------
+   local  : this device only (opened as a plain file, or anywhere the server can't be reached)
+   online : the website; scores go to the Online board at /api/scores on the same site
+   booth  : the booth cabinet; a file named booth-key.js next to the game holds the booth key
+            (window.MOC_BOOTH_KEY, optionally window.MOC_API_BASE), and scores go to the Booth board.
+   Shared modes keep a copy of the last board they saw, and queue scores while offline. */
+const LB=(()=>{
+  const S={mode:'local',board:'',base:'',key:'',queue:[],busy:false};
+  const QKEY=()=>'moc-sd-queue-'+S.board, CKEY=()=>'moc-sd-board-'+S.board;
+  const ls={ get(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } },
+             set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} } };
+  function apply(b){ if(!b||!Array.isArray(b.score)||!Array.isArray(b.time)) return false;
+    hiscores=b.score.map(r=>[r.i,r.v]); besttimes=b.time.map(r=>[r.i,r.v]); ls.set(CKEY(),{score:b.score,time:b.time}); return true; }
+  async function call(method,body){
+    const ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),6000);
+    try{ const r=await fetch(S.base+'/api/scores'+(method==='GET'?'?board='+S.board:''),
+           {method,signal:ctl.signal,cache:'no-store',headers:body?{'content-type':'text/plain'}:{},body:body?JSON.stringify(body):undefined});
+         const j=await r.json().catch(()=>null); return {ok:r.ok,status:r.status,j}; }
+    catch(e){ return {ok:false,status:0,j:null}; } finally{ clearTimeout(to); } }
+  function start(mode,board,base,key){
+    S.mode=mode; S.board=board; S.base=base; S.key=key||''; S.queue=ls.get(QKEY(),[]);
+    const c=ls.get(CKEY(),null); if(c) apply(c); else { hiscores=[]; besttimes=[]; }
+    refresh(); }
+  async function refresh(){
+    if(S.mode==='local'||S.busy) return; S.busy=true;
+    try{
+      const r=await call('GET'); if(r.ok) apply(r.j);
+      if(r.ok) while(S.queue.length){ const q=S.queue[0]; const p=await call('POST',q);
+        if(p.status===0) break;                  // still offline: keep it for later
+        S.queue.shift(); ls.set(QKEY(),S.queue); if(p.ok) apply(p.j); }
+    } finally{ S.busy=false; } }
+  function remark(name,score,frames){
+    newRank=newRank>=0?hiscores.findIndex(h=>h[0]===name&&h[1]===score):-1;
+    newRankT=newRankT>=0&&frames!=null?besttimes.findIndex(h=>h[0]===name&&h[1]===frames):-1; }
+  async function submit(name,score,frames){
+    if(S.mode==='local') return;
+    const body={id:Date.now().toString(36)+Math.random().toString(36).slice(2,10),board:S.board,initials:name,score,frames:frames==null?null:frames};
+    if(S.key) body.key=S.key;
+    S.queue.push(body); ls.set(QKEY(),S.queue);
+    const now=new Date().toISOString();   // keep the run on this screen's copy too, in case of a restart before it uploads
+    ls.set(CKEY(),{score:hiscores.map(([i,v])=>({i,v,t:now})),time:besttimes.map(([i,v])=>({i,v,t:now}))});
+    if(S.busy) return; S.busy=true;
+    try{ const p=await call('POST',body);
+      if(p.status!==0){ S.queue=S.queue.filter(q=>q.id!==body.id); ls.set(QKEY(),S.queue); }
+      if(p.ok&&apply(p.j)) remark(name,score,frames);
+    } finally{ S.busy=false; } }
+  // pick the mode
+  if(location.protocol==='file:'){
+    const sc=document.createElement('script'); sc.src='booth-key.js';
+    sc.onload=()=>{ if(window.MOC_BOOTH_KEY) start('booth','booth',String(window.MOC_API_BASE||'https://play.mocproducts.app').replace(/\/$/,''),window.MOC_BOOTH_KEY); };
+    document.head.appendChild(sc);
+  } else if(/^https?:$/.test(location.protocol)){
+    (async()=>{ S.board='online'; S.base=''; const r=await call('GET');
+      if(r.ok&&r.j&&Array.isArray(r.j.score)) start('online','online','',''); else S.board=''; })();
+  }
+  return { refresh, submit, shared:()=>S.mode!=='local', queueLen:()=>S.queue.length, get mode(){return S.mode;}, get board(){return S.board;} };
+})();
 
 /* ---------------- level: MAP 1 // SERVICE DRIVE ---------------- */
 const LW=216, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
@@ -1055,7 +1120,7 @@ function buildLevel(){
   bd(16,4,'?');
   bd(20,4,'B'); bd(21,4,'M'); bd(22,4,'B'); bd(23,4,'?'); bd(24,4,'B'); bd(22,8,'?');
   drum(28,2); drum(37,3); drum(47,3); put(54,1,'H'); put(55,1,'H'); put(55,2,'H'); drum(56,4);
-  bd(64,5,'L');
+  if(!jugTaken) bd(64,5,'L');   // the hidden 1UP jug is once per game (it sits before the checkpoint, so it would otherwise allow endless lives)
   // first pit, the parts wall
   bd(76,4,'?'); bd(77,4,'B'); bd(78,4,'M'); bd(79,4,'B');
   for(let x=80;x<=87;x++) put(x,8,'B');
@@ -1100,11 +1165,17 @@ const solidAt=(tx,ty)=>{ if(tx<0||tx>=LW) return true; if(ty<0||ty>=LH) return f
 let state='title', stT=0, freeze=0;
 let score=0, drops=0, lives=3, timeLeft=300, timeAcc=0, cuts=0, hurried=false, checkpoint=false;
 let P, cam={x:0}, enemies=[], items=[], shots=[], parts=[], pops=[], bumps=[], spawnIdx=0, banner=null;
-let flag={y:0,base:0,done:false,grabY:0}, entry=null, newRank=-1, flagPts=0, timeBonus=0;
+let flag={y:0,base:0,done:false,grabY:0}, entry=null, newRank=-1, newRankT=-1, scoresPage=0, scoresFirst=0, flagPts=0, timeBonus=0;
+/* Speed-run timer, in game frames (60 per second, so it is exact and immune to lag): runs from the first moment
+   of play to the flag. Deaths count against it (death, time-up and the lives card all keep it running);
+   pausing stops it, and the opening lives card before the first life doesn't count. */
+let runFrames=0, runOn=false, runCleared=false, runTime=0, jugTaken=false;
+function fmtTime(f){ const cs=Math.round(f*100/60), m=Math.floor(cs/6000), sec=Math.floor(cs/100)%60, c=cs%100;
+  return m+':'+String(sec).padStart(2,'0')+'.'+String(c).padStart(2,'0'); }
 
 function newPlayer(col){ return {x:col*16+2,y:192-15,w:12,h:15,vx:0,vy:0,face:1,onG:false,big:false,power:0,inv:0,star:0,anim:0,animT:0,gU:0.125,gD:0.4375,jumping:false,airMax:2.5625,skid:false,crouch:false,throwT:0,
   jbuf:0,coy:0,chain:0,lift:null,auto:null,autoT:0,hidden:false,dead:false,grow:0,prevB:0}; }
-function newGame(){ score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; setState('intro'); keepAwake(); }
+function newGame(){ score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; newRankT=-1; runFrames=0; runOn=false; runCleared=false; runTime=0; jugTaken=false; setState('intro'); keepAwake(); }
 function startLevel(){
   buildLevel(); enemies=[]; items=[]; shots=[]; parts=[]; pops=[]; bumps=[]; banner=null; freeze=0;
   const col=checkpoint?CHECK_COL:3; P=newPlayer(col); cam.x=Math.max(0,P.x-96);
@@ -1112,7 +1183,7 @@ function startLevel(){
   for(const d of fieldDrops) if(d.x<cam.x) d.got=true;
   timeLeft=300; timeAcc=0; hurried=false; MUS.tempo=1;
   flag={y:0,base:192,done:false,grabY:0,bay:0};
-  setState('play'); musicStart();
+  runOn=true; setState('play'); musicStart();
 }
 function setState(s){ state=s; stT=0; if(s!=='play') musicStop(); }
 function toTitle(){ musicStop(); setState('title'); }
@@ -1269,6 +1340,7 @@ function updatePlayer(){
   if(p.y>H+8) die();
 }
 function startFlag(){
+  runCleared=true; runTime=runFrames;
   const p=P; flag.done=true; p.auto='slide'; p.autoT=0; p.vx=0; p.vy=0; p.x=POLE_COL*16+7-p.w+1;
   const gy=p.y; flagPts= gy<56?5000: gy<88?2000: gy<120?800: gy<160?400:100; addScore(flagPts,p.x+14,p.y);
   flag.y=40; musicStop(); SFX.flag(); P.star=0;
@@ -1293,7 +1365,7 @@ function collect(it){
   if(it.kind==='bottle'){ addScore(1000,it.x,it.y); showBanner('MOTOR OIL CONDITIONER','PROTECTION UP'); if(!P.big) grow(); else SFX.power(); }
   if(it.kind==='aerosol'){ addScore(1000,it.x,it.y); showBanner('BRAKE WASH','B TO SPRAY // CLEANS SLUDGE'); if(!P.big) grow(); else { P.power=1; freeze=30; P.grow=30; SFX.power(); } }
   if(it.kind==='octane'){ addScore(1000,it.x,it.y); showBanner('THRUST OCTANE BOOSTER','FULL THROTTLE'); P.star=600; MUS.tempo=1.45; SFX.power(); }
-  if(it.kind==='jug'){ lives++; pops.push({x:it.x,y:it.y,txt:'1UP',t:50}); showBanner('PREMIUM ENGINE TREATMENT','EXTRA LIFE'); SFX.oneup(); }
+  if(it.kind==='jug'){ jugTaken=true; lives++; pops.push({x:it.x,y:it.y,txt:'1UP',t:50}); showBanner('PREMIUM ENGINE TREATMENT','EXTRA LIFE'); SFX.oneup(); }
 }
 function updateItems(){
   for(const it of items){
@@ -1523,11 +1595,14 @@ function drawTitle(){
 }
 function drawScores(){
   fill('k'); ctx.fillRect(0,0,W,H);
+  const times=scoresPage===1, list=times?besttimes:hiscores, mark=times?newRankT:newRank;
   text('LEADERBOARD',W/2,18,{align:'c',scale:2});
-  text('MAP 1 // SERVICE DRIVE',W/2,42,{align:'c'});
-  hiscores.forEach(([n,s],i)=>{ const y=62+i*14; const hl=i===newRank&&Math.floor(stT/15)%2===0;
+  text(times?'FASTEST TIMES':'TOP SCORES',W/2,42,{align:'c',ink:'#FCBC00'});
+  for(let i=0;i<10;i++){ const y=62+i*14, row=list[i], hl=row&&i===mark&&Math.floor(stT/15)%2===0;
     if(hl){ fill('w'); px(40,y-3,176,13); }
-    const ink=hl?'k':'w'; text(pad0(i+1,2),48,y,{ink}); text(n,96,y,{ink}); text(pad0(s,6),208,y,{align:'r',ink}); });
+    const ink=hl?'k':'w'; text(pad0(i+1,2),48,y,{ink});
+    if(row){ text(row[0],96,y,{ink}); text(times?fmtTime(row[1]):pad0(row[1],6),208,y,{align:'r',ink}); }
+    else { text('---',96,y,{ink:'#787878'}); text(times?'-:--.--':'------',208,y,{align:'r',ink:'#787878'}); } }
   if(Math.floor(stT/30)%2===0) text(touchMode?'TAP START':'PRESS START',W/2,212,{align:'c'});
 }
 function drawIntro(){
@@ -1555,8 +1630,8 @@ function drawClear(){
   text('MAP 1 CLEAR',W/2,6,{align:'c',scale:2});
   ctx.drawImage(LOGO_BIG.n,96,28);
   text('ONE PARTNER. ONE INVOICE.',W/2,104,{align:'c'}); text('ONE SOLUTION.',W/2,114,{align:'c'});
-  const rows=[['DROPS',pad0(drops,2)],['INVOICES',pad0(cuts,2)],['FLAG',pad0(flagPts,4)],['TIME BONUS',pad0(timeBonus,5)],['SCORE',pad0(score,6)]];
-  rows.forEach(([k,v],i)=>{ const y=130+i*11; text(k,32,y); text(v,224,y,{align:'r'}); });
+  const rows=[['DROPS',pad0(drops,2)],['INVOICES',pad0(cuts,2)],['FLAG',pad0(flagPts,4)],['TIME BONUS',pad0(timeBonus,5)],['SCORE',pad0(score,6)],['RUN TIME',fmtTime(runTime)]];
+  rows.forEach(([k,v],i)=>{ const y=128+i*10; text(k,32,y); text(v,224,y,{align:'r'}); });
   text('THANKS FOR PLAYING',W/2,192,{align:'c'});
   if(stT>90 && Math.floor(stT/30)%2===0) text(touchMode?'TAP START':'PRESS START',W/2,210,{align:'c'});
 }
@@ -1564,11 +1639,16 @@ function drawOver(){
   fill('k'); ctx.fillRect(0,0,W,H); drawHUD();
   text('GAME OVER',W/2,116,{align:'c'});
 }
-function afterRun(){ if(qualifies(score)){ entry={letters:[0,0,0],pos:0,t:0}; setState('entry'); } else { newRank=-1; setState('scores'); } }
+function afterRun(){ runOn=false;
+  const qs=qualifies(score), qt=runCleared&&qualifiesTime(runTime);
+  if(qs||qt){ entry={letters:[0,0,0],pos:0,t:0,qs,qt}; setState('entry'); }
+  else { newRank=-1; newRankT=-1; showScores(0); } }
+function showScores(page){ scoresPage=page; scoresFirst=page; setState('scores'); }
 const ABC='ABCDEFGHIJKLMNOPQRSTUVWXYZ.';
 function drawEntry(){
   fill('k'); ctx.fillRect(0,0,W,H);
-  text('NEW HIGH SCORE',W/2,36,{align:'c',scale:2}); text(pad0(score,6),W/2,64,{align:'c'});
+  text(entry.qs&&entry.qt?'NEW RECORDS':entry.qs?'NEW HIGH SCORE':'NEW BEST TIME',W/2,36,{align:'c',scale:2});
+  text(entry.qs&&entry.qt?pad0(score,6)+'    '+fmtTime(runTime):entry.qs?pad0(score,6):fmtTime(runTime),W/2,64,{align:'c'});
   text('ENTER YOUR INITIALS',W/2,90,{align:'c'});
   for(let i=0;i<3;i++){ const x=W/2-40+i*28; const ch=ABC[entry.letters[i]];
     text(ch,x+3,114,{scale:2}); fill('w'); if(i===entry.pos && Math.floor(stT/12)%2===0) px(x+1,134,18,2); else if(i<entry.pos) px(x+1,134,18,1); }
@@ -1581,29 +1661,34 @@ function tickEntry(){
   if(pressed('b')&&e.pos>0){ e.pos--; SFX.select(); }
   if(pressed('a')||pressed('start')||frame-lastInput>45*60){ SFX.ping(); e.pos++; if(e.pos>2||frame-lastInput>45*60){
     const name=e.letters.map(i=>ABC[i]).join('');
-    hiscores.push([name,score]); hiscores.sort((a,b)=>b[1]-a[1]); hiscores=hiscores.slice(0,10);
-    newRank=hiscores.findIndex(h=>h[0]===name&&h[1]===score); saveHS(); setState('scores'); } }
+    newRank=e.qs?insertScore(name,score):-1; newRankT=e.qt?insertTime(name,runTime):-1;
+    if(!LB.shared()){ saveHS(); saveTimes(); }
+    LB.submit(name,score,runCleared?runTime:null);
+    showScores(e.qs?0:1); } }
 }
 
 /* ---------------- main loop ---------------- */
 let paused=false;
 function step(){
   frame++; stT++; pollInput();
+  if(runOn && !runCleared && ((state==='play'&&!paused)||state==='dying'||state==='timeup'||state==='intro')) runFrames++;
   if(noticeT>0) noticeT--;
+  if((state==='title'||state==='scores') && frame%(20*60)===30) LB.refresh();
   switch(state){
     case 'title':
       titleRunner.x+=1.2; titleRunner.anim+=0.2; if(titleRunner.x>W+40) titleRunner.x=-60;
-      if(stT>20&&(pressed('start')||pressed('a'))){ auInit(); SFX.ping(); if(menuSel===1){ menuSel=0; newRank=-1; setState('scores'); } else newGame(); }
-      else if(stT>600){ menuSel=0; setState('scores'); }
+      if(stT>20&&(pressed('start')||pressed('a'))){ auInit(); SFX.ping(); if(menuSel===1){ menuSel=0; newRank=-1; showScores(0); } else newGame(); }
+      else if(stT>600){ menuSel=0; newRank=-1; newRankT=-1; showScores(0); }
       break;
     case 'scores':
-      if(pressed('start')||pressed('a')){ auInit(); SFX.ping(); newRank=-1; newGame(); }
-      else if(stT>(newRank>=0?720:420)){ newRank=-1; setState('title'); }
+      if(pressed('start')||pressed('a')){ auInit(); SFX.ping(); newRank=-1; newRankT=-1; newGame(); }
+      else if(stT>((scoresPage===0?newRank:newRankT)>=0?600:360)){
+        if(scoresPage===0){ scoresPage=1; stT=0; } else { newRank=-1; newRankT=-1; setState('title'); } }
       break;
     case 'tally': tickTally(); break;
     case 'fireworks': tickFireworks(); break;
     case 'clear': if((stT>140&&(pressed('start')||pressed('a')))||stT>720) afterRun(); break;
-    case 'over': if(stT>240) afterRun(); break;
+    case 'over': runOn=false; if(stT>240) afterRun(); break;
     case 'entry': tickEntry(); break;
     case 'padcfg': if(stT>60*30) setState('title'); break;
     case 'intro': if(stT>150) startLevel(); break;
@@ -1647,7 +1732,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden&&state==='
 buildLevel(); P=newPlayer(3); setState('title'); requestAnimationFrame(loop);
 
 /* test hook for automated play-testing (read-only state plus a warp) */
-window.__moc={ hint(){ return hintAB; }, go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
+window.__moc={ hint(){ return hintAB; }, get run(){ return {runFrames,runOn,runCleared,runTime,jugTaken}; }, lb(){ return {mode:LB.mode,board:LB.board,scores:hiscores,times:besttimes,queue:LB.queueLen()}; }, setRun(f){ runFrames=f; }, go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
   far(){ return FAR.toDataURL(); },
   coins(){ const c=document.createElement('canvas'); c.width=60; c.height=18; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,60,18); DROP.forEach((d,i)=>g.drawImage(d.n,2+i*12,2)); g.drawImage(MINI_DROP.n,50,5); return c.toDataURL(); },
   zoom(){ const c=document.createElement('canvas'); c.width=96; c.height=34; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,96,34); g.drawImage(AEROSOL.n,4,4); g.drawImage(CONE.n,24,14); g.drawImage(PS_OUTLINED.n,44,10); g.fillStyle='#000'; g.fillRect(64,0,32,34); g.drawImage(PS_OUTLINED.n,72,10); return c.toDataURL(); },

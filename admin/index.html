@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Leaderboard Staff</title>
+<style>
+  :root{ --bg:#0b0b0b; --panel:#161616; --line:#2a2a2a; --ink:#f2f2f2; --dim:#9a9a9a; --gold:#fcbc00; --red:#e5484d; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif}
+  main{max-width:880px;margin:0 auto;padding:28px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-0.01em} .sub{color:var(--dim);margin:0 0 24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  label{display:block;font-size:13px;color:var(--dim);margin-bottom:6px}
+  input{width:100%;max-width:320px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#0e0e0e;color:var(--ink);font:inherit}
+  button{font:inherit;border-radius:8px;border:1px solid var(--line);background:#222;color:var(--ink);padding:9px 14px;cursor:pointer}
+  button:hover{border-color:#444} button.primary{background:var(--gold);color:#000;border-color:var(--gold);font-weight:600}
+  button.danger{color:var(--red);border-color:#4a1d1f} button.danger.armed{background:var(--red);color:#fff;border-color:var(--red)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tabs{display:flex;gap:8px;margin-bottom:14px} .tabs button.on{background:var(--ink);color:#000;border-color:var(--ink)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px} @media (max-width:700px){ .grid{grid-template-columns:1fr} }
+  h2{font-size:15px;margin:0 0 10px;color:var(--gold);text-transform:uppercase;letter-spacing:0.08em}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td{padding:6px 4px;border-top:1px solid var(--line)} td.n{color:var(--dim);width:2.2em} td.v{text-align:right} td.x{width:1%;white-space:nowrap;text-align:right}
+  td.x button{padding:3px 9px;font-size:13px}
+  .empty{color:var(--dim);padding:8px 0} .msg{min-height:1.4em;color:var(--dim);margin-top:10px} .msg.err{color:var(--red)}
+  .env{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim);margin-left:8px;vertical-align:middle}
+  a{color:var(--ink)} .links a{margin-right:16px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Leaderboard staff <span class="env" id="env"></span></h1>
+  <p class="sub">Super MOC Bros. Remove an entry or reset a board. The TVs and the cabinet pick up changes within seconds.</p>
+
+  <div class="card" id="login">
+    <label for="pw">Staff password</label>
+    <div class="row"><input id="pw" type="password" autocomplete="current-password"><button class="primary" id="go">Open</button></div>
+    <div class="msg" id="lmsg"></div>
+  </div>
+
+  <div id="app" class="hide">
+    <div class="tabs"><button data-b="booth" class="on">Booth</button><button data-b="online">Online</button></div>
+    <div class="card">
+      <div class="grid">
+        <div><h2>Top scores</h2><div id="score"></div></div>
+        <div><h2>Fastest times</h2><div id="time"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <button class="danger" data-reset="score">Reset top scores</button>
+        <button class="danger" data-reset="time">Reset fastest times</button>
+        <button class="danger" data-reset="all">Reset whole board</button>
+      </div>
+      <div class="msg" id="msg">Buttons in red need a second click to confirm.</div>
+    </div>
+    <div class="card links">
+      <a href="/board" target="_blank" rel="noopener">Booth TV page</a>
+      <a href="/board?b=online" target="_blank" rel="noopener">Online TV page</a>
+      <a href="/" target="_blank" rel="noopener">Play the game</a>
+    </div>
+  </div>
+</main>
+<script>
+(()=>{
+  const $=s=>document.querySelector(s);
+  let pw='', board='booth', boards=null;
+  try{ pw=sessionStorage.getItem('moc-lb-pw')||''; }catch(e){}
+  const fmtTime=f=>{ const cs=Math.round(f*100/60), m=Math.floor(cs/6000), s=Math.floor(cs/100)%60, c=cs%100; return m+':'+String(s).padStart(2,'0')+'.'+String(c).padStart(2,'0'); };
+  const when=t=>new Date(t).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  async function api(body){
+    const r=await fetch('/api/admin',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:pw,...body})});
+    const j=await r.json().catch(()=>({error:'Unexpected response ('+r.status+').'})); if(!r.ok) throw new Error(j.error||('Error '+r.status)); return j; }
+  function arm(btn,fn){ // two-click confirm, no pop-up dialogs
+    if(btn.classList.contains('armed')){ btn.classList.remove('armed'); fn(); return; }
+    document.querySelectorAll('.armed').forEach(b=>{ b.classList.remove('armed'); if(b.dataset.label) b.textContent=b.dataset.label; });
+    btn.dataset.label=btn.textContent; btn.classList.add('armed'); btn.textContent='Click again to confirm';
+    setTimeout(()=>{ if(btn.classList.contains('armed')){ btn.classList.remove('armed'); btn.textContent=btn.dataset.label; } },4000); }
+  function table(kind){
+    const list=boards[board][kind], el=$('#'+kind); el.innerHTML='';
+    if(!list.length){ el.innerHTML='<div class="empty">No entries yet.</div>'; return; }
+    const t=document.createElement('table');
+    list.forEach((r,i)=>{ const tr=t.insertRow();
+      tr.insertCell().outerHTML='<td class="n">'+(i+1)+'</td>';
+      const c1=tr.insertCell(); c1.textContent=r.i; c1.title=when(r.t);
+      const c2=tr.insertCell(); c2.className='v'; c2.textContent=kind==='time'?fmtTime(r.v):r.v.toLocaleString();
+      const c3=tr.insertCell(); c3.className='x'; const b=document.createElement('button'); b.className='danger'; b.textContent='Remove';
+      b.onclick=()=>arm(b,()=>act({action:'delete',board,id:r.id},'Removed '+r.i+'.')); c3.appendChild(b); });
+    el.appendChild(t); }
+  function draw(){ table('score'); table('time'); document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.b===board)); }
+  async function act(body,done){ const m=$('#msg'); m.className='msg';
+    try{ const j=await api(body); boards=j.boards; draw(); m.textContent=done; } catch(e){ m.className='msg err'; m.textContent=e.message; } }
+  async function open(){ const m=$('#lmsg'); m.className='msg'; m.textContent='Checking...';
+    try{ const j=await api({action:'list'}); boards=j.boards;
+      try{ sessionStorage.setItem('moc-lb-pw',pw); }catch(e){}
+      $('#env').textContent=j.env==='production'?'Live site':j.env==='preview'?'Preview (test data)':'Local test';
+      $('#login').classList.add('hide'); $('#app').classList.remove('hide'); draw(); }
+    catch(e){ m.className='msg err'; m.textContent=e.message; } }
+  $('#go').onclick=()=>{ pw=$('#pw').value; open(); };
+  $('#pw').addEventListener('keydown',e=>{ if(e.key==='Enter'){ pw=$('#pw').value; open(); } });
+  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ board=b.dataset.b; draw(); });
+  document.querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>arm(b,()=>{ const k=b.dataset.reset;
+    act({action:'reset',board,kind:k==='all'?undefined:k},(k==='all'?'Whole '+board+' board':board+(k==='score'?' top scores':' fastest times'))+' reset.'); }));
+  setInterval(()=>{ if(boards&&!document.querySelector('.armed')) api({action:'list'}).then(j=>{ boards=j.boards; draw(); }).catch(()=>{}); },15000);
+  if(pw) open();
+})();
+</script>
+</body>
+</html>

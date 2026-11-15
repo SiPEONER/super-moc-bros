@@ -5,14 +5,55 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/((?!api/).*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
       ]
     }
   ],
   "redirects": [
-    { "source": "/:path*", "has": [{ "type": "host", "value": "super-moc-bros\\.vercel\\.app" }], "destination": "https://play.mocproducts.app/:path*", "permanent": true },
-    { "source": "/:path*", "has": [{ "type": "host", "value": "super-moc-bros-bnd-fish\\.vercel\\.app" }], "destination": "https://play.mocproducts.app/:path*", "permanent": true },
-    { "source": "/:path*", "has": [{ "type": "host", "value": "super-moc-bros-git-main-bnd-fish\\.vercel\\.app" }], "destination": "https://play.mocproducts.app/:path*", "permanent": true }
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "super-moc-bros\\.vercel\\.app"
+        }
+      ],
+      "destination": "https://play.mocproducts.app/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "super-moc-bros-bnd-fish\\.vercel\\.app"
+        }
+      ],
+      "destination": "https://play.mocproducts.app/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "super-moc-bros-git-main-bnd-fish\\.vercel\\.app"
+        }
+      ],
+      "destination": "https://play.mocproducts.app/:path*",
+      "permanent": true
+    }
   ]
 }

@@ -1,0 +1,10 @@
+{
+  "name": "super-moc-bros",
+  "private": true,
+  "type": "module",
+  "description": "Super MOC Bros. booth game, with shared leaderboards (Vercel functions + Neon Postgres).",
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "@neondatabase/serverless": "1.2.1"
+  }
+}
