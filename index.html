@@ -599,7 +599,8 @@ tint(MINI_DROP,{w:NES.gold,l:NES.cream}); const MINI_DROP2=mk(MINI_DROP.rows,{w:
 FOAM.forEach(s=>tint(s,{k:NES.blk,w:NES.wht,l:NES.pblue,m:NES.lblue}));
 tint(PUFF,{w:NES.wht,l:NES.pblue});
 const PAL_BRICK={k:NES.blk,m:NES.brick,l:NES.peach,d:NES.dred};
-tint(DEBRIS,PAL_BRICK); tint(T.G,PAL_BRICK); tint(T.B,PAL_BRICK); tint(T.U,PAL_BRICK);
+tint(DEBRIS,PAL_BRICK); tint(T.G,PAL_BRICK);
+T.GU=mk(T.G.rows,{k:NES.blk,m:'#357A8B',l:'#90AFB5',d:'#285C68'});   // underground floor: teal stone (Andy's reference) tint(T.B,PAL_BRICK); tint(T.U,PAL_BRICK);
 T.Q.forEach(s=>tint(s,{k:NES.blk,l:NES.orange,w:NES.cream,m:NES.brick,d:NES.dred}));
 const PAL_DRUM={k:NES.blk,d:NES.navy,m:NES.blue,l:NES.lblue,w:NES.pblue,y:NES.wht,g:NES.gry};
 for(const c of ['[',']','{','}']) tint(T[c],PAL_DRUM);
@@ -1513,7 +1514,7 @@ function drawTiles(){
   for(let ty=0;ty<LH;ty++) for(let tx=c0;tx<=c1;tx++){
     const c=map[ty][tx]; if(c===' '||c==='L') continue;
     let s=null;
-    if(c==='G') s=T.G; else if(c==='B'||c==='S'||c==='C') s=T.B; else if(c==='?'||c==='M') s=T.Q[qf];
+    if(c==='G') s=tx>=ROOM_C0?T.GU:T.G; else if(c==='B'||c==='S'||c==='C') s=T.B; else if(c==='?'||c==='M') s=T.Q[qf];
     else s=T[c];
     if(!s) continue;
     let oy=0; for(const b of bumps) if(b.tx===tx&&b.ty===ty) oy=-Math.round(Math.sin((10-b.t)/10*Math.PI)*6);
