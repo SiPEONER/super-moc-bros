@@ -974,7 +974,16 @@ function dpadEval(){
 dpad.addEventListener('pointerdown',e=>{e.preventDefault();auInit();try{dpad.setPointerCapture(e.pointerId);}catch(_){} dpadPtr.set(e.pointerId,{x:e.clientX,y:e.clientY});dpadEval();lastInput=frame;});
 dpad.addEventListener('pointermove',e=>{if(dpadPtr.has(e.pointerId)){dpadPtr.set(e.pointerId,{x:e.clientX,y:e.clientY});dpadEval();}});
 const dpUp=e=>{dpadPtr.delete(e.pointerId);dpadEval();};
-dpad.addEventListener('pointerup',dpUp); dpad.addEventListener('pointercancel',dpUp);
+dpad.addEventListener('pointerup',dpUp); dpad.addEventListener('pointercancel',dpUp); dpad.addEventListener('lostpointercapture',dpUp);
+/* Phones sometimes drop the "finger lifted" event (finger slides off, a notification, a system swipe), which used to
+   leave d-pad directions or buttons held for good. So everything is released whenever no finger is on the screen,
+   when a new first finger lands, when the page loses focus, and at the start of every game. */
+function releaseTouch(){ dpadPtr.clear(); dpadEval();
+  for(const el of pad.querySelectorAll('.pb')){ setTch(el.dataset.k,false); el.classList.remove('on'); } }
+addEventListener('pointerdown',e=>{ if(e.pointerType==='touch'&&e.isPrimary) releaseTouch(); },true);
+for(const t of ['touchend','touchcancel']) addEventListener(t,e=>{ if(e.touches.length===0) releaseTouch(); },{passive:true});
+addEventListener('blur',releaseTouch); addEventListener('pagehide',releaseTouch);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) releaseTouch(); });
 addEventListener('pointerdown',e=>{ auInit(); if(e.pointerType==='touch'&&!touchMode){touchMode=true;layout();} showTools(); lastInput=frame; });
 cv.addEventListener('pointerdown',()=>{ if(state==='title'||state==='scores') latch.start=true; });
 
@@ -1104,7 +1113,7 @@ let flag={y:0,base:0,done:false,grabY:0}, entry=null, newRank=-1, flagPts=0, tim
 
 function newPlayer(col){ return {x:col*16+2,y:192-15,w:12,h:15,vx:0,vy:0,face:1,onG:false,big:false,power:0,inv:0,star:0,anim:0,animT:0,gU:0.125,gD:0.4375,jumping:false,airMax:2.5625,skid:false,crouch:false,throwT:0,
   jbuf:0,coy:0,chain:0,lift:null,auto:null,autoT:0,hidden:false,dead:false,grow:0,prevB:0}; }
-function newGame(){ score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; setState('intro'); keepAwake(); }
+function newGame(){ if(typeof releaseTouch==='function') releaseTouch(); score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; setState('intro'); keepAwake(); }
 function startLevel(){
   buildLevel(); enemies=[]; items=[]; shots=[]; parts=[]; pops=[]; bumps=[]; banner=null; freeze=0;
   const col=checkpoint?CHECK_COL:3; P=newPlayer(col); cam.x=Math.max(0,P.x-96);
@@ -1205,7 +1214,7 @@ function grow(){ P.big=true; P.y-=30-P.h; P.h=30; freeze=40; P.grow=40; SFX.powe
    Walk tops out at 1.5625, run at 2.5625; skidding brakes harder than letting go;
    jump strength and gravity depend on horizontal speed at take-off; holding A lowers gravity on the way up. */
 const PH={walkMax:1.5625,runMax:2.5625,walkAcc:0.0371,runAcc:0.0557,release:0.0508,skid:0.1016,minWalk:0.0742,maxFall:4.5};
-const JUMPS=[[1.0,-4,0.125,0.4375],[2.3125,-4,0.1172,0.375],[99,-5,0.1563,0.5625]];
+const JUMPS=[[1.0,-4.3,0.125,0.4375],[2.3125,-4.3,0.1172,0.375],[99,-5.3,0.1563,0.5625]];   // v28: about 15% higher, so a standing jump clears 4 blocks (was 62 px, needed 64)
 function updatePlayer(){
   const p=P;
   if(p.auto) return updateAuto();
