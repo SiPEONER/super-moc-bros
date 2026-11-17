@@ -1119,9 +1119,9 @@ const LB=(()=>{
 const LW_MAIN=216, LW=236, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
 /* Secret stockroom (v29): press Down on top of the tall blue drum (cols 56-57) to drop into an underground
    MOC stockroom full of oil drops (cols 218-233, past the end of the level). Its drum (cols 230-231) brings you
-   back up out of the short drum at cols 187-188, just before the final staircase: a shortcut past the lift bay,
-   like the original's bonus pipe. */
-const ROOM_C0=218, SECRET_IN=56, SECRET_OUT=230, SECRET_EXIT=187;
+   back up out of the short drum at cols 172-173, just past the lift bay: a shortcut, in the same spot as the
+   original's bonus-room exit pipe. */
+const ROOM_C0=218, SECRET_IN=56, SECRET_OUT=230, SECRET_EXIT=172;
 const SOLID=new Set(['G','B','?','M','S','C','U','H','[',']','{','}']);
 let map, blockData, spawns, decor, fieldDrops, lifts;
 function buildLevel(){
@@ -1165,7 +1165,7 @@ function buildLevel(){
     {t:'invoice',x:82,h:10},{t:'sludge',x:84,h:9},{t:'sludge',x:96},{t:'invoice',x:99,h:7},
     {t:'sludge',x:104},{t:'sludge',x:105.5},{t:'carbon',x:126},{t:'sludge',x:120},{t:'sludge',x:121.5},
     {t:'invoice',x:126,h:9},{t:'sludge',x:132},{t:'invoice',x:144,h:8},{t:'carbon',x:158},
-    {t:'carbon',x:176},{t:'sludge',x:178},{t:'sludge',x:179.5},{t:'invoice',x:186,h:9},
+    {t:'carbon',x:180},{t:'sludge',x:181},{t:'sludge',x:182.5},{t:'invoice',x:186,h:9},
   ].sort((a,b)=>a.x-b.x);
   fieldDrops=[];
   const fd=(x,h)=>fieldDrops.push({x:x*16+3,y:(13-h)*16+1,w:10,h:14,got:false});
@@ -1387,7 +1387,7 @@ function pipeWarp(){
     p.zone='room'; p.auto=null; p.x=(ROOM_C0+2)*16+2; p.y=48; p.vx=0; p.vy=0; p.onG=false; p.jumping=false; p.face=1;
     cam.x=ROOM_C0*16;
   } else {                                   // back up, out of the short drum past the lift bay
-    p.zone=null; p.x=SECRET_EXIT*16+16-p.w/2;   // (cols 187-188, the drum before the final staircase) p.clipY=(13-2)*16; p.y=p.clipY; p.vx=0; p.vy=0; p.face=1;
+    p.zone=null; p.x=SECRET_EXIT*16+16-p.w/2;   // (cols 172-173, the drum just past the lift bay) p.clipY=(13-2)*16; p.y=p.clipY; p.vx=0; p.vy=0; p.face=1;
     p.auto='pipeOut'; p.autoT=0; SFX.pipe();
     cam.x=Math.max(0,Math.min(p.x-104,LW_MAIN*16-W));
     while(spawnIdx<spawns.length && spawns[spawnIdx].x*16<cam.x+40) spawnIdx++;   // nothing spawns behind you

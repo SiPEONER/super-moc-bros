@@ -33,8 +33,8 @@ How the game picks a board:
 
 Checks on every score (`lib/lb.js`):
 - Initials are 3 characters (A-Z or .).
-- Score at most 420,000. That's every block, drop, power-up and enemy (and the secret stockroom) on all 10 possible lives, plus the best flag, time bonus and fireworks.
-- Time at least 9.00 s. The fastest route is through the secret stockroom: 557 frames (9.28 s) at top speed with no stops.
+- Score at most 420,000. That's every block, drop, power-up and enemy (and the secret warehouse) on all 10 possible lives, plus the best flag, time bonus and fireworks.
+- Time at least 10.50 s. The fastest route is through the secret warehouse: 650 frames (10.83 s) at top speed with no stops.
 - The Online board takes at most 20 scores per device (IP) per 10 minutes. Only a one-way hash of the IP is stored.
 - The Booth board needs the booth key and has no rate limit.
 
