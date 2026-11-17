@@ -740,6 +740,7 @@ const BOX=(()=>{ const W=16,H=16,g=grid(W,H);
   BOX_MARK.forEach((r,y)=>r.split('').forEach((c,x)=>{ if(c==='#') g.set(1+x,7+y,'i'); }));
   g.rect(0,0,W,1,'o'); g.rect(0,H-1,W,1,'o'); g.rect(0,0,1,H,'o'); g.rect(W-1,0,1,H,'o');   // dark-brown edge so the black MOC stays separate from it
   return mk(g.rows(),{m:'#C88850',l:'#E0A868',d:'#8C5828',t:'#D8B888',o:'#583010',i:NES.blk}); })();
+T.H=BOX;   // v29: the solid stacks are MOC product boxes now (we don't sell tires); the scenery boxes are gone
 /* MOC waves on the big bottle's label: the official wave device rasterized to the label's width */
 const WAVE_D=[...document.querySelectorAll('#waves-src path')].map(p=>p.getAttribute('d'));
 function pixelWaves(w,y0,y1,thr,hOut){ thr=thr||0.45; const vbW=292.61, vh=y1-y0, h=hOut||Math.round(w*vh/vbW), ss=8;
@@ -848,6 +849,7 @@ const SFX={
   select(){ if(!AU.ctx)return; tone('p25',990,now(),0.05,0.08); },
   over(){ if(!AU.ctx)return; seq('p25',['G4','-','E4','-','C4','-','-','-','G3'],0.16,0.11); seq('tri',['C3','-','A2','-','F2','-','-','-','C2'],0.16,0.25); },
   firework(){ if(!AU.ctx)return; const t=now(); noise(t,0.5,0.35,900); tone('tri',120,t,0.3,0.3,50); },
+  pipe(){ if(!AU.ctx)return; const t=now(); for(let i=0;i<3;i++) tone('p25',[392,262,196][i],t+i*0.09,0.08,0.11,[262,196,131][i]); },
   hurry(){ if(!AU.ctx)return; seq('p50',['E6','F6','E6','F6','E6','F6'],0.07,0.08); },
 };
 /* Original loop, C major, 8 bars of eighth notes. */
@@ -1112,7 +1114,12 @@ const LB=(()=>{
 })();
 
 /* ---------------- level: MAP 1 // SERVICE DRIVE ---------------- */
-const LW=216, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
+const LW_MAIN=216, LW=236, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
+/* Secret stockroom (v29): press Down on top of the tall blue drum (cols 56-57) to drop into an underground
+   MOC stockroom full of oil drops (cols 218-233, past the end of the level). Its drum (cols 230-231) brings you
+   back up out of the short drum at cols 187-188, just before the final staircase: a shortcut past the lift bay,
+   like the original's bonus pipe. */
+const ROOM_C0=218, SECRET_IN=56, SECRET_OUT=230, SECRET_EXIT=187;
 const SOLID=new Set(['G','B','?','M','S','C','U','H','[',']','{','}']);
 let map, blockData, spawns, decor, fieldDrops, lifts;
 function buildLevel(){
@@ -1138,13 +1145,18 @@ function buildLevel(){
   bd(106,4,'?'); bd(109,4,'?'); bd(112,4,'?'); bd(109,8,'M');
   put(118,4,'B'); for(let x=121;x<=123;x++) put(x,8,'B');
   put(128,8,'B'); bd(129,8,'?'); bd(130,8,'?'); put(131,8,'B'); put(129,4,'B'); put(130,4,'B');
-  // tire stacks
+  // MOC box stacks (solid)
   up(134,4); down(138,4);
   up(147,4); for(let j=1;j<=4;j++) put(151,j,'H'); down(154,4);
   // lift bay pit 162-167
   drum(172,2); bd(182,4,'B'); bd(183,4,'?'); bd(184,4,'B'); drum(187,2);
   up(190,8); for(let j=1;j<=8;j++) put(198,j,'H');
   put(POLE_COL,1,'H');
+  // the stockroom: box walls and ceiling, a box shelf, the way-out drum
+  for(let y=2;y<=12;y++){ m[y][ROOM_C0]='H'; m[y][ROOM_C0+15]='H'; }
+  for(let x=ROOM_C0;x<=ROOM_C0+15;x++) m[2][x]='H';
+  for(let x=ROOM_C0+3;x<=ROOM_C0+10;x++) for(let h=1;h<=3;h++) put(x,h,'H');
+  drum(SECRET_OUT,2);
   map=m;
   spawns=[
     {t:'sludge',x:22},{t:'sludge',x:41},{t:'sludge',x:51},{t:'sludge',x:52.5},
@@ -1161,9 +1173,14 @@ function buildLevel(){
   for(let x=110;x<=112;x++) fd(x,7);
   for(let x=136;x<=139;x++) fd(x,6);
   for(let x=164;x<=166;x++) fd(x,8);
+  // stockroom drops: 19, like the original's bonus room count
+  for(let x=ROOM_C0+3;x<=ROOM_C0+10;x++) fd(x,4);
+  for(let x=ROOM_C0+4;x<=ROOM_C0+9;x++) fd(x,6);
+  for(let x=ROOM_C0+5;x<=ROOM_C0+8;x++) fd(x,8);
+  fd(ROOM_C0+1,1);
   lifts=[{x:164*16,w:48,y:176,top:128,bot:184,dir:-1,dy:0,sp:0.6}];
   decor=[
-    {t:'box',x:14.5,n:1},{t:'box',x:30.5,n:3},{t:'tree',x:51.5},{t:'bush',x:63,n:2},{t:'bush',x:82.5,n:1},{t:'box',x:89.5,n:2},{t:'tree',x:106,tall:true},{t:'tree',x:107.5},{t:'box',x:113,n:3},{t:'bush',x:126.5,n:3},{t:'box',x:179,n:2},{t:'tree',x:185,tall:true},{t:'box',x:202,n:1},{t:'cone',x:26},{t:'lamp',x:35},{t:'chest',x:42},{t:'cone',x:60},{t:'cone',x:67},{t:'cone',x:72},
+    {t:'tree',x:51.5},{t:'bush',x:63,n:2},{t:'bush',x:82.5,n:1},{t:'tree',x:106,tall:true},{t:'tree',x:107.5},{t:'bush',x:126.5,n:3},{t:'tree',x:185,tall:true},{t:'cone',x:26},{t:'lamp',x:35},{t:'chest',x:42},{t:'cone',x:60},{t:'cone',x:67},{t:'cone',x:72},
     {t:'sign',x:74,txt:'SERVICE LANE 1'},{t:'lamp',x:95},{t:'chest',x:124},{t:'chest',x:142},{t:'lamp',x:145},
     {t:'sign',x:157,txt:'LIFT ZONE'},{t:'cone',x:160},{t:'cone',x:170},{t:'cone',x:177},{t:'lamp',x:200},
   ];
@@ -1248,6 +1265,7 @@ function makeItem(kind,bx,by){
 
 /* ---------------- enemies ---------------- */
 function spawnEnemies(){
+  if(P.zone==='room') return;
   while(spawnIdx<spawns.length && spawns[spawnIdx].x*16 < cam.x+W+24){
     const s=spawns[spawnIdx++]; const x=s.x*16;
     if(s.t==='sludge') enemies.push({t:'sludge',x:x+1,y:(13-(s.h||1))*16+2,w:14,h:14,vx:-0.5,vy:0,dead:false,anim:0});
@@ -1294,6 +1312,12 @@ function updatePlayer(){
   const dir=(R&&!L)?1:(L&&!R)?-1:0;
   const sp=Math.abs(p.vx), sgn=Math.sign(p.vx);
   p.skid=false;
+  if(p.onG && down && !p.auto){
+    const cx=p.x+p.w/2, tx=Math.floor(cx/16), ty=Math.floor((p.y+p.h+1)/16), t=map[ty]&&map[ty][tx];
+    const d0=p.zone==='room'?SECRET_OUT:SECRET_IN;
+    if((t==='['||t===']') && cx>=d0*16+6 && cx<=d0*16+26){
+      p.auto='pipeIn'; p.autoT=0; p.vx=0; p.vy=0; p.clipY=ty*16; p.crouch=false; SFX.pipe(); return; }
+  }
   if(p.onG){
     p.crouch = p.big && down;
     const d = p.crouch?0:dir;
@@ -1345,7 +1369,7 @@ function updatePlayer(){
   if(p.star>0){ p.star--; if(p.star===0) MUS.tempo=hurried?1.25:1; }
   for(const d of fieldDrops) if(!d.got && overlap(p,d)){ d.got=true; addDrop(); }
   const poleX=POLE_COL*16-1;   // the base block counts, so walking into it finishes the level
-  if(!flag.done && p.x+p.w>=poleX){ startFlag(); }
+  if(!flag.done && p.zone!=='room' && p.x+p.w>=poleX){ startFlag(); }
   if(p.y>H+8) die();
 }
 function startFlag(){
@@ -1355,8 +1379,22 @@ function startFlag(){
   flag.y=40; musicStop(); SFX.flag(); P.star=0;
   const dg=timeLeft%10; fireworksLeft=(dg===1||dg===3||dg===6)?dg:0;
 }
+function pipeWarp(){
+  const p=P; enemies=[]; items=[]; shots=[];
+  if(p.zone!=='room'){                       // down into the stockroom
+    p.zone='room'; p.auto=null; p.x=(ROOM_C0+2)*16+2; p.y=48; p.vx=0; p.vy=0; p.onG=false; p.jumping=false; p.face=1;
+    cam.x=ROOM_C0*16;
+  } else {                                   // back up, out of the short drum past the lift bay
+    p.zone=null; p.x=SECRET_EXIT*16+16-p.w/2;   // (cols 187-188, the drum before the final staircase) p.clipY=(13-2)*16; p.y=p.clipY; p.vx=0; p.vy=0; p.face=1;
+    p.auto='pipeOut'; p.autoT=0; SFX.pipe();
+    cam.x=Math.max(0,Math.min(p.x-104,LW_MAIN*16-W));
+    while(spawnIdx<spawns.length && spawns[spawnIdx].x*16<cam.x+40) spawnIdx++;   // nothing spawns behind you
+  }
+}
 function updateAuto(){
   const p=P; p.autoT++;
+  if(p.auto==='pipeIn'){ p.y+=1; if(p.autoT>p.h+4) pipeWarp(); return; }
+  if(p.auto==='pipeOut'){ p.y-=1; if(p.y+p.h<=p.clipY){ p.y=p.clipY-p.h; p.auto=null; p.onG=true; p.jumping=false; } return; }
   if(p.auto==='slide'){
     const bottom=flag.base-p.h; if(p.y<bottom) p.y=Math.min(bottom,p.y+2.2);
     flag.y=Math.min(flag.base-28,flag.y+2.2);
@@ -1424,7 +1462,7 @@ function playerVsEnemies(){
   }
 }
 function updateLifts(){ for(const l of lifts){ const ny=l.y+l.dir*l.sp; if(ny<=l.top){l.dir=1;} if(ny>=l.bot){l.dir=-1;} l.dy=Math.max(l.top,Math.min(l.bot,ny))-l.y; l.y+=l.dy; } }
-function updateCamera(){ const target=P.x-104; if(target>cam.x) cam.x=Math.min(target,LW*16-W); }
+function updateCamera(){ if(P.zone==='room'){ cam.x=ROOM_C0*16; return; } const target=P.x-104; if(target>cam.x) cam.x=Math.min(target,LW_MAIN*16-W); }
 
 function updatePlay(){
   if(freeze>0){ freeze--; if(P.grow>0)P.grow--; else if(P.grow<0)P.grow++; updateParts(); return; }
@@ -1433,7 +1471,7 @@ function updatePlay(){
   }
   updateLifts(); updatePlayer(); if(state!=='play') return;
   spawnEnemies(); updateEnemies(); playerVsEnemies(); updateItems(); updateShots(); updateParts(); updateCamera();
-  if(!checkpoint && P.x>CHECK_COL*16) checkpoint=true;
+  if(!checkpoint && P.zone!=='room' && P.x>CHECK_COL*16) checkpoint=true;
   if(frame-lastInput>60*60 && !P.auto){ toTitle(); }
 }
 
@@ -1448,6 +1486,7 @@ function rectO(x,y,w,h){ px(x,y,w,1); px(x,y+h-1,w,1); px(x,y,1,h); px(x+w-1,y,1
 function panel(x,y,w,h,base,border){ fill('k'); px(x,y,w,h); fill(base||'d'); px(x+1,y+1,w-2,h-2); fill(border||'l'); rectO(x+2,y+2,w-4,h-4); }
 
 function drawBackground(){
+  if(P&&P.zone==='room'){ fill('k'); ctx.fillRect(0,0,W,H); return; }
   fill('sky'); ctx.fillRect(0,0,W,H);
   const s1=Math.round(cam.x*0.3)%512; ctx.drawImage(SKYL,-s1,0); ctx.drawImage(SKYL,512-s1,0);
   const s2=Math.round(cam.x*0.55)%512; ctx.drawImage(FAR,-s2,0); ctx.drawImage(FAR,512-s2,0);
@@ -1512,6 +1551,7 @@ function drawPlayer(){
   let big=p.big; if(p.grow>0) big=Math.floor(p.grow/4)%2===0; if(p.grow<0) big=Math.floor(-p.grow/4)%2===1;
   const s=playerSprite(big);
   const mode = p.star>0 ? (Math.floor(frame/3)%3===0?'i':(p.power?'p':'n')) : (p.power?'p':'n');
+  if(p.auto==='pipeIn'||p.auto==='pipeOut'){ ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,p.clipY); ctx.clip(); spr(s,p.x-2,p.y+p.h-s.h,p.face<0,mode); ctx.restore(); return; }
   spr(s,p.x-2,p.y+p.h-s.h,p.face<0,mode);
 }
 function drawEnemies(){
@@ -1559,6 +1599,7 @@ function drawHUD(){
 }
 function drawWorld(){
   drawBackground(); drawDecor(); drawFlagAndBay(); drawItemsBehind(); drawTiles(); drawLifts(); drawFieldDrops(); drawItemsFront();
+  if(P&&P.zone==='room') text('MOC STOCKROOM',W/2,52,{align:'c',ink:'#585858'});
   drawEnemies(); drawPlayer(); drawFx(); drawHUD();
 }
 
@@ -1754,7 +1795,7 @@ window.__moc={ hint(){ return hintAB; }, get run(){ return {runFrames,runOn,runC
     return c.toDataURL(); },
   setTime(n){ timeLeft=n; }, fw(n){ fireworksLeft=n; },
   get state(){return state;}, get P(){return P;}, get cam(){return cam;}, get score(){return score;}, get lives(){return lives;},
-  get enemies(){return enemies;}, get items(){return items;}, warp(col){ P.x=col*16+2; P.y=60; P.vy=0; cam.x=Math.max(0,Math.min(P.x-104,LW*16-W)); spawnIdx=0; while(spawnIdx<spawns.length&&spawns[spawnIdx].x*16<cam.x+40)spawnIdx++; enemies=[]; },
+  get enemies(){return enemies;}, get items(){return items;}, warp(col){ P.x=col*16+2; P.y=60; P.vy=0; cam.x=Math.max(0,Math.min(P.x-104,LW_MAIN*16-W)); P.zone=null; spawnIdx=0; while(spawnIdx<spawns.length&&spawns[spawnIdx].x*16<cam.x+40)spawnIdx++; enemies=[]; },
   step, render, solidAt:(x,y)=>solidAt(x,y), get map(){return map;}, get lifts(){return lifts;}, give(k){ if(k==='big'&&!P.big){P.big=true;P.y-=8;P.h=23;} if(k==='spray'){ if(!P.big){P.big=true;P.y-=8;P.h=23;} P.power=1;} if(k==='star')P.star=600; } };
 })();
 </script>
