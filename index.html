@@ -197,6 +197,8 @@ const thinAdv=ch=>{ const b=FONT_T[ch]; if(!b) return 3; let w=0; for(let i=0;i<
 function textW(s,o={}){ const sc=o.scale||1; s=String(s).toUpperCase(); if(!o.thin) return s.length*8*sc-sc; let w=0; for(const ch of s) w+=thinAdv(ch); return (w-1)*sc; }
 function text(s,x,y,o={}){
   s=String(s).toUpperCase(); const sc=o.scale||1, adv=(o.thin?6:8)*sc, w=textW(s,o);
+  // trim: line the text up on its first visible pixel (I and T have a blank column on their left in this font)
+  if(o.trim&&!o.thin&&FONT[s[0]]){ const b=FONT[s[0]]; let c=7; for(let i=0;i<b.length;i++) if(b[i]==='1') c=Math.min(c,i%7); x-=c*sc; }
   if(o.align==='c')x=Math.round(x-w/2); else if(o.align==='r')x=x-w;
   const gw=o.thin?5:7, gh=o.thin?6:8, dy=o.thin?sc:0;
   const draw=(ink,ox,oy)=>{ let cx=x; for(let i=0;i<s.length;i++){ const g=glyph(s[i],ink,o.thin);
@@ -599,7 +601,9 @@ tint(MINI_DROP,{w:NES.gold,l:NES.cream}); const MINI_DROP2=mk(MINI_DROP.rows,{w:
 FOAM.forEach(s=>tint(s,{k:NES.blk,w:NES.wht,l:NES.pblue,m:NES.lblue}));
 tint(PUFF,{w:NES.wht,l:NES.pblue});
 const PAL_BRICK={k:NES.blk,m:NES.brick,l:NES.peach,d:NES.dred};
-tint(DEBRIS,PAL_BRICK); tint(T.G,PAL_BRICK); tint(T.B,PAL_BRICK); tint(T.U,PAL_BRICK);
+tint(DEBRIS,PAL_BRICK); tint(T.G,PAL_BRICK);
+tint(T.B,PAL_BRICK); tint(T.U,PAL_BRICK);
+T.GU=mk(T.G.rows,{k:NES.blk,m:'#357A8B',l:'#90AFB5',d:'#285C68'});   // underground floor: teal stone (Andy's reference)
 T.Q.forEach(s=>tint(s,{k:NES.blk,l:NES.orange,w:NES.cream,m:NES.brick,d:NES.dred}));
 const PAL_DRUM={k:NES.blk,d:NES.navy,m:NES.blue,l:NES.lblue,w:NES.pblue,y:NES.wht,g:NES.gry};
 for(const c of ['[',']','{','}']) tint(T[c],PAL_DRUM);
@@ -740,6 +744,7 @@ const BOX=(()=>{ const W=16,H=16,g=grid(W,H);
   BOX_MARK.forEach((r,y)=>r.split('').forEach((c,x)=>{ if(c==='#') g.set(1+x,7+y,'i'); }));
   g.rect(0,0,W,1,'o'); g.rect(0,H-1,W,1,'o'); g.rect(0,0,1,H,'o'); g.rect(W-1,0,1,H,'o');   // dark-brown edge so the black MOC stays separate from it
   return mk(g.rows(),{m:'#C88850',l:'#E0A868',d:'#8C5828',t:'#D8B888',o:'#583010',i:NES.blk}); })();
+T.H=BOX;   // v29: the solid stacks are MOC product boxes now (we don't sell tires); the scenery boxes are gone
 /* MOC waves on the big bottle's label: the official wave device rasterized to the label's width */
 const WAVE_D=[...document.querySelectorAll('#waves-src path')].map(p=>p.getAttribute('d'));
 function pixelWaves(w,y0,y1,thr,hOut){ thr=thr||0.45; const vbW=292.61, vh=y1-y0, h=hOut||Math.round(w*vh/vbW), ss=8;
@@ -848,6 +853,7 @@ const SFX={
   select(){ if(!AU.ctx)return; tone('p25',990,now(),0.05,0.08); },
   over(){ if(!AU.ctx)return; seq('p25',['G4','-','E4','-','C4','-','-','-','G3'],0.16,0.11); seq('tri',['C3','-','A2','-','F2','-','-','-','C2'],0.16,0.25); },
   firework(){ if(!AU.ctx)return; const t=now(); noise(t,0.5,0.35,900); tone('tri',120,t,0.3,0.3,50); },
+  pipe(){ if(!AU.ctx)return; const t=now(); for(let i=0;i<3;i++) tone('p25',[392,262,196][i],t+i*0.09,0.08,0.11,[262,196,131][i]); },
   hurry(){ if(!AU.ctx)return; seq('p50',['E6','F6','E6','F6','E6','F6'],0.07,0.08); },
 };
 /* Original loop, C major, 8 bars of eighth notes. */
@@ -1042,12 +1048,82 @@ let hiscores=loadHS();
 function loadHS(){ try{ const s=JSON.parse(localStorage.getItem(HS_KEY)); if(Array.isArray(s)&&s.length) return s.slice(0,10); }catch(e){} return HS_DEFAULT.map(x=>x.slice()); }
 function saveHS(){ try{ localStorage.setItem(HS_KEY,JSON.stringify(hiscores)); }catch(e){} }
 function qualifies(s){ return s>0 && (hiscores.length<10 || s>hiscores[hiscores.length-1][1]); }
+const TIMES_KEY='moc-service-drive-times-v1';
+let besttimes=(()=>{ try{ const t=JSON.parse(localStorage.getItem(TIMES_KEY)); if(Array.isArray(t)) return t.slice(0,10); }catch(e){} return []; })();
+function saveTimes(){ try{ localStorage.setItem(TIMES_KEY,JSON.stringify(besttimes)); }catch(e){} }
+function qualifiesTime(f){ return f>0 && (besttimes.length<10 || f<besttimes[besttimes.length-1][1]); }
+function insertScore(name,v){ hiscores.push([name,v]); hiscores.sort((a,b)=>b[1]-a[1]); hiscores=hiscores.slice(0,10); return hiscores.findIndex(h=>h[0]===name&&h[1]===v); }
+function insertTime(name,v){ besttimes.push([name,v]); besttimes.sort((a,b)=>a[1]-b[1]); besttimes=besttimes.slice(0,10); return besttimes.findIndex(h=>h[0]===name&&h[1]===v); }
 let clearReqT=0;
-function clearScoresRequest(){ if(frame-clearReqT<150){ hiscores=HS_DEFAULT.map(x=>x.slice()); saveHS(); notice='SCORES RESET'; noticeT=150; clearReqT=0; } else { clearReqT=frame; notice='SHIFT+BACKSPACE AGAIN TO RESET SCORES'; noticeT=150; } }
+function clearScoresRequest(){ if(LB.shared()){ notice='RESET THIS BOARD ON THE STAFF PAGE'; noticeT=180; return; }
+  if(frame-clearReqT<150){ hiscores=HS_DEFAULT.map(x=>x.slice()); saveHS(); besttimes=[]; saveTimes(); notice='SCORES RESET'; noticeT=150; clearReqT=0; } else { clearReqT=frame; notice='SHIFT+BACKSPACE AGAIN TO RESET SCORES'; noticeT=150; } }
 let notice='', noticeT=0;
 
+/* ---------------- shared leaderboards ----------------
+   local  : this device only (opened as a plain file, or anywhere the server can't be reached)
+   online : the website; scores go to the Online board at /api/scores on the same site
+   booth  : the booth cabinet; a file named booth-key.js next to the game holds the booth key
+            (window.MOC_BOOTH_KEY, optionally window.MOC_API_BASE), and scores go to the Booth board.
+   Shared modes keep a copy of the last board they saw, and queue scores while offline. */
+const LB=(()=>{
+  const S={mode:'local',board:'',base:'',key:'',queue:[],busy:false};
+  const QKEY=()=>'moc-sd-queue-'+S.board, CKEY=()=>'moc-sd-board-'+S.board;
+  const ls={ get(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } },
+             set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} } };
+  function apply(b){ if(!b||!Array.isArray(b.score)||!Array.isArray(b.time)) return false;
+    hiscores=b.score.map(r=>[r.i,r.v]); besttimes=b.time.map(r=>[r.i,r.v]); ls.set(CKEY(),{score:b.score,time:b.time}); return true; }
+  async function call(method,body){
+    const ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),6000);
+    try{ const r=await fetch(S.base+'/api/scores'+(method==='GET'?'?board='+S.board:''),
+           {method,signal:ctl.signal,cache:'no-store',headers:body?{'content-type':'text/plain'}:{},body:body?JSON.stringify(body):undefined});
+         const j=await r.json().catch(()=>null); return {ok:r.ok,status:r.status,j}; }
+    catch(e){ return {ok:false,status:0,j:null}; } finally{ clearTimeout(to); } }
+  function start(mode,board,base,key){
+    S.mode=mode; S.board=board; S.base=base; S.key=key||''; S.queue=ls.get(QKEY(),[]);
+    const c=ls.get(CKEY(),null); if(c) apply(c); else { hiscores=[]; besttimes=[]; }
+    refresh(); }
+  async function refresh(){
+    if(S.mode==='local'||S.busy) return; S.busy=true;
+    try{
+      const r=await call('GET'); if(r.ok) apply(r.j);
+      if(r.ok) while(S.queue.length){ const q=S.queue[0]; const p=await call('POST',q);
+        if(p.status===0) break;                  // still offline: keep it for later
+        S.queue.shift(); ls.set(QKEY(),S.queue); if(p.ok) apply(p.j); }
+    } finally{ S.busy=false; } }
+  function remark(name,score,frames){
+    newRank=newRank>=0?hiscores.findIndex(h=>h[0]===name&&h[1]===score):-1;
+    newRankT=newRankT>=0&&frames!=null?besttimes.findIndex(h=>h[0]===name&&h[1]===frames):-1; }
+  async function submit(name,score,frames){
+    if(S.mode==='local') return;
+    const body={id:Date.now().toString(36)+Math.random().toString(36).slice(2,10),board:S.board,initials:name,score,frames:frames==null?null:frames};
+    if(S.key) body.key=S.key;
+    S.queue.push(body); ls.set(QKEY(),S.queue);
+    const now=new Date().toISOString();   // keep the run on this screen's copy too, in case of a restart before it uploads
+    ls.set(CKEY(),{score:hiscores.map(([i,v])=>({i,v,t:now})),time:besttimes.map(([i,v])=>({i,v,t:now}))});
+    if(S.busy) return; S.busy=true;
+    try{ const p=await call('POST',body);
+      if(p.status!==0){ S.queue=S.queue.filter(q=>q.id!==body.id); ls.set(QKEY(),S.queue); }
+      if(p.ok&&apply(p.j)) remark(name,score,frames);
+    } finally{ S.busy=false; } }
+  // pick the mode
+  if(location.protocol==='file:'){
+    const sc=document.createElement('script'); sc.src='booth-key.js';
+    sc.onload=()=>{ if(window.MOC_BOOTH_KEY) start('booth','booth',String(window.MOC_API_BASE||'https://play.mocproducts.app').replace(/\/$/,''),window.MOC_BOOTH_KEY); };
+    document.head.appendChild(sc);
+  } else if(/^https?:$/.test(location.protocol)){
+    (async()=>{ S.board='online'; S.base=''; const r=await call('GET');
+      if(r.ok&&r.j&&Array.isArray(r.j.score)) start('online','online','',''); else S.board=''; })();
+  }
+  return { refresh, submit, shared:()=>S.mode!=='local', queueLen:()=>S.queue.length, get mode(){return S.mode;}, get board(){return S.board;} };
+})();
+
 /* ---------------- level: MAP 1 // SERVICE DRIVE ---------------- */
-const LW=216, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
+const LW_MAIN=216, LW=236, POLE_COL=206, BAY_COL=209, CHECK_COL=90;
+/* Secret stockroom (v29): press Down on top of the tall blue drum (cols 56-57) to drop into an underground
+   MOC stockroom full of oil drops (cols 218-233, past the end of the level). Its drum (cols 230-231) brings you
+   back up out of the short drum at cols 172-173, just past the lift bay: a shortcut, in the same spot as the
+   original's bonus-room exit pipe. */
+const ROOM_C0=218, SECRET_IN=56, SECRET_OUT=230, SECRET_EXIT=172;
 const SOLID=new Set(['G','B','?','M','S','C','U','H','[',']','{','}']);
 let map, blockData, spawns, decor, fieldDrops, lifts;
 function buildLevel(){
@@ -1064,7 +1140,7 @@ function buildLevel(){
   bd(16,4,'?');
   bd(20,4,'B'); bd(21,4,'M'); bd(22,4,'B'); bd(23,4,'?'); bd(24,4,'B'); bd(22,8,'?');
   drum(28,2); drum(37,3); drum(47,3); put(54,1,'H'); put(55,1,'H'); put(55,2,'H'); drum(56,4);
-  bd(64,5,'L');
+  if(!jugTaken) bd(64,5,'L');   // the hidden 1UP jug is once per game (it sits before the checkpoint, so it would otherwise allow endless lives)
   // first pit, the parts wall
   bd(76,4,'?'); bd(77,4,'B'); bd(78,4,'M'); bd(79,4,'B');
   for(let x=80;x<=87;x++) put(x,8,'B');
@@ -1073,20 +1149,25 @@ function buildLevel(){
   bd(106,4,'?'); bd(109,4,'?'); bd(112,4,'?'); bd(109,8,'M');
   put(118,4,'B'); for(let x=121;x<=123;x++) put(x,8,'B');
   put(128,8,'B'); bd(129,8,'?'); bd(130,8,'?'); put(131,8,'B'); put(129,4,'B'); put(130,4,'B');
-  // tire stacks
+  // MOC box stacks (solid)
   up(134,4); down(138,4);
   up(147,4); for(let j=1;j<=4;j++) put(151,j,'H'); down(154,4);
   // lift bay pit 162-167
   drum(172,2); bd(182,4,'B'); bd(183,4,'?'); bd(184,4,'B'); drum(187,2);
   up(190,8); for(let j=1;j<=8;j++) put(198,j,'H');
   put(POLE_COL,1,'H');
+  // the stockroom: box walls and ceiling, a box shelf, the way-out drum
+  for(let y=2;y<=12;y++){ m[y][ROOM_C0]='H'; m[y][ROOM_C0+15]='H'; }
+  for(let x=ROOM_C0;x<=ROOM_C0+15;x++) m[2][x]='H';
+  for(let x=ROOM_C0+3;x<=ROOM_C0+10;x++) for(let h=1;h<=3;h++) put(x,h,'H');
+  drum(SECRET_OUT,2);
   map=m;
   spawns=[
     {t:'sludge',x:22},{t:'sludge',x:41},{t:'sludge',x:51},{t:'sludge',x:52.5},
     {t:'invoice',x:82,h:10},{t:'sludge',x:84,h:9},{t:'sludge',x:96},{t:'invoice',x:99,h:7},
     {t:'sludge',x:104},{t:'sludge',x:105.5},{t:'carbon',x:126},{t:'sludge',x:120},{t:'sludge',x:121.5},
     {t:'invoice',x:126,h:9},{t:'sludge',x:132},{t:'invoice',x:144,h:8},{t:'carbon',x:158},
-    {t:'carbon',x:176},{t:'sludge',x:178},{t:'sludge',x:179.5},{t:'invoice',x:186,h:9},
+    {t:'carbon',x:180},{t:'sludge',x:181},{t:'sludge',x:182.5},{t:'invoice',x:186,h:9},
   ].sort((a,b)=>a.x-b.x);
   fieldDrops=[];
   const fd=(x,h)=>fieldDrops.push({x:x*16+3,y:(13-h)*16+1,w:10,h:14,got:false});
@@ -1096,9 +1177,14 @@ function buildLevel(){
   for(let x=110;x<=112;x++) fd(x,7);
   for(let x=136;x<=139;x++) fd(x,6);
   for(let x=164;x<=166;x++) fd(x,8);
+  // stockroom drops: 19, like the original's bonus room count
+  for(let x=ROOM_C0+3;x<=ROOM_C0+10;x++) fd(x,4);
+  for(let x=ROOM_C0+4;x<=ROOM_C0+9;x++) fd(x,6);
+  for(let x=ROOM_C0+5;x<=ROOM_C0+8;x++) fd(x,8);
+  fd(ROOM_C0+1,1);
   lifts=[{x:164*16,w:48,y:176,top:128,bot:184,dir:-1,dy:0,sp:0.6}];
   decor=[
-    {t:'box',x:14.5,n:1},{t:'box',x:30.5,n:3},{t:'tree',x:51.5},{t:'bush',x:63,n:2},{t:'bush',x:82.5,n:1},{t:'box',x:89.5,n:2},{t:'tree',x:106,tall:true},{t:'tree',x:107.5},{t:'box',x:113,n:3},{t:'bush',x:126.5,n:3},{t:'box',x:179,n:2},{t:'tree',x:185,tall:true},{t:'box',x:202,n:1},{t:'cone',x:26},{t:'lamp',x:35},{t:'chest',x:42},{t:'cone',x:60},{t:'cone',x:67},{t:'cone',x:72},
+    {t:'tree',x:51.5},{t:'bush',x:63,n:2},{t:'bush',x:82.5,n:1},{t:'tree',x:106,tall:true},{t:'tree',x:107.5},{t:'bush',x:126.5,n:3},{t:'tree',x:185,tall:true},{t:'cone',x:26},{t:'lamp',x:35},{t:'chest',x:42},{t:'cone',x:60},{t:'cone',x:67},{t:'cone',x:72},
     {t:'sign',x:74,txt:'SERVICE LANE 1'},{t:'lamp',x:95},{t:'chest',x:124},{t:'chest',x:142},{t:'lamp',x:145},
     {t:'sign',x:157,txt:'LIFT ZONE'},{t:'cone',x:160},{t:'cone',x:170},{t:'cone',x:177},{t:'lamp',x:200},
   ];
@@ -1109,11 +1195,17 @@ const solidAt=(tx,ty)=>{ if(tx<0||tx>=LW) return true; if(ty<0||ty>=LH) return f
 let state='title', stT=0, freeze=0;
 let score=0, drops=0, lives=3, timeLeft=300, timeAcc=0, cuts=0, hurried=false, checkpoint=false;
 let P, cam={x:0}, enemies=[], items=[], shots=[], parts=[], pops=[], bumps=[], spawnIdx=0, banner=null;
-let flag={y:0,base:0,done:false,grabY:0}, entry=null, newRank=-1, flagPts=0, timeBonus=0;
+let flag={y:0,base:0,done:false,grabY:0}, entry=null, newRank=-1, newRankT=-1, scoresPage=0, scoresFirst=0, flagPts=0, timeBonus=0;
+/* Speed-run timer, in game frames (60 per second, so it is exact and immune to lag): runs from the first moment
+   of play to the flag. Deaths count against it (death, time-up and the lives card all keep it running);
+   pausing stops it, and the opening lives card before the first life doesn't count. */
+let runFrames=0, runOn=false, runCleared=false, runTime=0, jugTaken=false;
+function fmtTime(f){ const cs=Math.round(f*100/60), m=Math.floor(cs/6000), sec=Math.floor(cs/100)%60, c=cs%100;
+  return m+':'+String(sec).padStart(2,'0')+'.'+String(c).padStart(2,'0'); }
 
 function newPlayer(col){ return {x:col*16+2,y:192-15,w:12,h:15,vx:0,vy:0,face:1,onG:false,big:false,power:0,inv:0,star:0,anim:0,animT:0,gU:0.125,gD:0.4375,jumping:false,airMax:2.5625,skid:false,crouch:false,throwT:0,
   jbuf:0,coy:0,chain:0,lift:null,auto:null,autoT:0,hidden:false,dead:false,grow:0,prevB:0}; }
-function newGame(){ if(typeof releaseTouch==='function') releaseTouch(); score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; setState('intro'); keepAwake(); }
+function newGame(){ if(typeof releaseTouch==='function') releaseTouch(); score=0; drops=0; lives=3; cuts=0; checkpoint=false; entry=null; newRank=-1; newRankT=-1; runFrames=0; runOn=false; runCleared=false; runTime=0; jugTaken=false; setState('intro'); keepAwake(); }
 function startLevel(){
   buildLevel(); enemies=[]; items=[]; shots=[]; parts=[]; pops=[]; bumps=[]; banner=null; freeze=0;
   const col=checkpoint?CHECK_COL:3; P=newPlayer(col); cam.x=Math.max(0,P.x-96);
@@ -1121,7 +1213,7 @@ function startLevel(){
   for(const d of fieldDrops) if(d.x<cam.x) d.got=true;
   timeLeft=300; timeAcc=0; hurried=false; MUS.tempo=1;
   flag={y:0,base:192,done:false,grabY:0,bay:0};
-  setState('play'); musicStart();
+  runOn=true; setState('play'); musicStart();
 }
 function setState(s){ state=s; stT=0; if(s!=='play') musicStop(); }
 function toTitle(){ musicStop(); setState('title'); }
@@ -1177,6 +1269,7 @@ function makeItem(kind,bx,by){
 
 /* ---------------- enemies ---------------- */
 function spawnEnemies(){
+  if(P.zone==='room') return;
   while(spawnIdx<spawns.length && spawns[spawnIdx].x*16 < cam.x+W+24){
     const s=spawns[spawnIdx++]; const x=s.x*16;
     if(s.t==='sludge') enemies.push({t:'sludge',x:x+1,y:(13-(s.h||1))*16+2,w:14,h:14,vx:-0.5,vy:0,dead:false,anim:0});
@@ -1223,6 +1316,12 @@ function updatePlayer(){
   const dir=(R&&!L)?1:(L&&!R)?-1:0;
   const sp=Math.abs(p.vx), sgn=Math.sign(p.vx);
   p.skid=false;
+  if(p.onG && down && !p.auto){
+    const cx=p.x+p.w/2, tx=Math.floor(cx/16), ty=Math.floor((p.y+p.h+1)/16), t=map[ty]&&map[ty][tx];
+    const d0=p.zone==='room'?SECRET_OUT:SECRET_IN;
+    if((t==='['||t===']') && cx>=d0*16+6 && cx<=d0*16+26){
+      p.auto='pipeIn'; p.autoT=0; p.vx=0; p.vy=0; p.clipY=ty*16; p.crouch=false; SFX.pipe(); return; }
+  }
   if(p.onG){
     p.crouch = p.big && down;
     const d = p.crouch?0:dir;
@@ -1274,17 +1373,32 @@ function updatePlayer(){
   if(p.star>0){ p.star--; if(p.star===0) MUS.tempo=hurried?1.25:1; }
   for(const d of fieldDrops) if(!d.got && overlap(p,d)){ d.got=true; addDrop(); }
   const poleX=POLE_COL*16-1;   // the base block counts, so walking into it finishes the level
-  if(!flag.done && p.x+p.w>=poleX){ startFlag(); }
+  if(!flag.done && p.zone!=='room' && p.x+p.w>=poleX){ startFlag(); }
   if(p.y>H+8) die();
 }
 function startFlag(){
+  runCleared=true; runTime=runFrames;
   const p=P; flag.done=true; p.auto='slide'; p.autoT=0; p.vx=0; p.vy=0; p.x=POLE_COL*16+7-p.w+1;
   const gy=p.y; flagPts= gy<56?5000: gy<88?2000: gy<120?800: gy<160?400:100; addScore(flagPts,p.x+14,p.y);
   flag.y=40; musicStop(); SFX.flag(); P.star=0;
   const dg=timeLeft%10; fireworksLeft=(dg===1||dg===3||dg===6)?dg:0;
 }
+function pipeWarp(){
+  const p=P; enemies=[]; items=[]; shots=[];
+  if(p.zone!=='room'){                       // down into the stockroom
+    p.zone='room'; p.auto=null; p.x=(ROOM_C0+2)*16+2; p.y=48; p.vx=0; p.vy=0; p.onG=false; p.jumping=false; p.face=1;
+    cam.x=ROOM_C0*16;
+  } else {                                   // back up, out of the short drum past the lift bay
+    p.zone=null; p.x=SECRET_EXIT*16+16-p.w/2;   // (cols 172-173, the drum just past the lift bay) p.clipY=(13-2)*16; p.y=p.clipY; p.vx=0; p.vy=0; p.face=1;
+    p.auto='pipeOut'; p.autoT=0; SFX.pipe();
+    cam.x=Math.max(0,Math.min(p.x-104,LW_MAIN*16-W));
+    while(spawnIdx<spawns.length && spawns[spawnIdx].x*16<cam.x+40) spawnIdx++;   // nothing spawns behind you
+  }
+}
 function updateAuto(){
   const p=P; p.autoT++;
+  if(p.auto==='pipeIn'){ p.y+=1; if(p.autoT>p.h+4) pipeWarp(); return; }
+  if(p.auto==='pipeOut'){ p.y-=1; if(p.y+p.h<=p.clipY){ p.y=p.clipY-p.h; p.auto=null; p.onG=true; p.jumping=false; } return; }
   if(p.auto==='slide'){
     const bottom=flag.base-p.h; if(p.y<bottom) p.y=Math.min(bottom,p.y+2.2);
     flag.y=Math.min(flag.base-28,flag.y+2.2);
@@ -1302,7 +1416,7 @@ function collect(it){
   if(it.kind==='bottle'){ addScore(1000,it.x,it.y); showBanner('MOTOR OIL CONDITIONER','PROTECTION UP'); if(!P.big) grow(); else SFX.power(); }
   if(it.kind==='aerosol'){ addScore(1000,it.x,it.y); showBanner('BRAKE WASH','B TO SPRAY // CLEANS SLUDGE'); if(!P.big) grow(); else { P.power=1; freeze=30; P.grow=30; SFX.power(); } }
   if(it.kind==='octane'){ addScore(1000,it.x,it.y); showBanner('THRUST OCTANE BOOSTER','FULL THROTTLE'); P.star=600; MUS.tempo=1.45; SFX.power(); }
-  if(it.kind==='jug'){ lives++; pops.push({x:it.x,y:it.y,txt:'1UP',t:50}); showBanner('PREMIUM ENGINE TREATMENT','EXTRA LIFE'); SFX.oneup(); }
+  if(it.kind==='jug'){ jugTaken=true; lives++; pops.push({x:it.x,y:it.y,txt:'1UP',t:50}); showBanner('PREMIUM ENGINE TREATMENT','EXTRA LIFE'); SFX.oneup(); }
 }
 function updateItems(){
   for(const it of items){
@@ -1352,7 +1466,7 @@ function playerVsEnemies(){
   }
 }
 function updateLifts(){ for(const l of lifts){ const ny=l.y+l.dir*l.sp; if(ny<=l.top){l.dir=1;} if(ny>=l.bot){l.dir=-1;} l.dy=Math.max(l.top,Math.min(l.bot,ny))-l.y; l.y+=l.dy; } }
-function updateCamera(){ const target=P.x-104; if(target>cam.x) cam.x=Math.min(target,LW*16-W); }
+function updateCamera(){ if(P.zone==='room'){ cam.x=ROOM_C0*16; return; } const target=P.x-104; if(target>cam.x) cam.x=Math.min(target,LW_MAIN*16-W); }
 
 function updatePlay(){
   if(freeze>0){ freeze--; if(P.grow>0)P.grow--; else if(P.grow<0)P.grow++; updateParts(); return; }
@@ -1361,7 +1475,7 @@ function updatePlay(){
   }
   updateLifts(); updatePlayer(); if(state!=='play') return;
   spawnEnemies(); updateEnemies(); playerVsEnemies(); updateItems(); updateShots(); updateParts(); updateCamera();
-  if(!checkpoint && P.x>CHECK_COL*16) checkpoint=true;
+  if(!checkpoint && P.zone!=='room' && P.x>CHECK_COL*16) checkpoint=true;
   if(frame-lastInput>60*60 && !P.auto){ toTitle(); }
 }
 
@@ -1376,6 +1490,7 @@ function rectO(x,y,w,h){ px(x,y,w,1); px(x,y+h-1,w,1); px(x,y,1,h); px(x+w-1,y,1
 function panel(x,y,w,h,base,border){ fill('k'); px(x,y,w,h); fill(base||'d'); px(x+1,y+1,w-2,h-2); fill(border||'l'); rectO(x+2,y+2,w-4,h-4); }
 
 function drawBackground(){
+  if(P&&P.zone==='room'){ fill('k'); ctx.fillRect(0,0,W,H); return; }
   fill('sky'); ctx.fillRect(0,0,W,H);
   const s1=Math.round(cam.x*0.3)%512; ctx.drawImage(SKYL,-s1,0); ctx.drawImage(SKYL,512-s1,0);
   const s2=Math.round(cam.x*0.55)%512; ctx.drawImage(FAR,-s2,0); ctx.drawImage(FAR,512-s2,0);
@@ -1402,7 +1517,7 @@ function drawTiles(){
   for(let ty=0;ty<LH;ty++) for(let tx=c0;tx<=c1;tx++){
     const c=map[ty][tx]; if(c===' '||c==='L') continue;
     let s=null;
-    if(c==='G') s=T.G; else if(c==='B'||c==='S'||c==='C') s=T.B; else if(c==='?'||c==='M') s=T.Q[qf];
+    if(c==='G') s=tx>=ROOM_C0?T.GU:T.G; else if(c==='B'||c==='S'||c==='C') s=T.B; else if(c==='?'||c==='M') s=T.Q[qf];
     else s=T[c];
     if(!s) continue;
     let oy=0; for(const b of bumps) if(b.tx===tx&&b.ty===ty) oy=-Math.round(Math.sin((10-b.t)/10*Math.PI)*6);
@@ -1440,6 +1555,7 @@ function drawPlayer(){
   let big=p.big; if(p.grow>0) big=Math.floor(p.grow/4)%2===0; if(p.grow<0) big=Math.floor(-p.grow/4)%2===1;
   const s=playerSprite(big);
   const mode = p.star>0 ? (Math.floor(frame/3)%3===0?'i':(p.power?'p':'n')) : (p.power?'p':'n');
+  if(p.auto==='pipeIn'||p.auto==='pipeOut'){ ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,p.clipY); ctx.clip(); spr(s,p.x-2,p.y+p.h-s.h,p.face<0,mode); ctx.restore(); return; }
   spr(s,p.x-2,p.y+p.h-s.h,p.face<0,mode);
 }
 function drawEnemies(){
@@ -1487,6 +1603,7 @@ function drawHUD(){
 }
 function drawWorld(){
   drawBackground(); drawDecor(); drawFlagAndBay(); drawItemsBehind(); drawTiles(); drawLifts(); drawFieldDrops(); drawItemsFront();
+  if(P&&P.zone==='room') text('MOC WAREHOUSE',W/2,52,{align:'c',ink:'#585858'});
   drawEnemies(); drawPlayer(); drawFx(); drawHUD();
 }
 
@@ -1532,11 +1649,14 @@ function drawTitle(){
 }
 function drawScores(){
   fill('k'); ctx.fillRect(0,0,W,H);
+  const times=scoresPage===1, list=times?besttimes:hiscores, mark=times?newRankT:newRank;
   text('LEADERBOARD',W/2,18,{align:'c',scale:2});
-  text('MAP 1 // SERVICE DRIVE',W/2,42,{align:'c'});
-  hiscores.forEach(([n,s],i)=>{ const y=62+i*14; const hl=i===newRank&&Math.floor(stT/15)%2===0;
+  text(times?'FASTEST TIMES':'TOP SCORES',W/2,42,{align:'c',ink:'#FCBC00'});
+  for(let i=0;i<10;i++){ const y=62+i*14, row=list[i], hl=row&&i===mark&&Math.floor(stT/15)%2===0;
     if(hl){ fill('w'); px(40,y-3,176,13); }
-    const ink=hl?'k':'w'; text(pad0(i+1,2),48,y,{ink}); text(n,96,y,{ink}); text(pad0(s,6),208,y,{align:'r',ink}); });
+    const ink=hl?'k':'w'; text(pad0(i+1,2),48,y,{ink});
+    if(row){ text(row[0],96,y,{ink}); text(times?fmtTime(row[1]):pad0(row[1],6),208,y,{align:'r',ink}); }
+    else { text('---',96,y,{ink:'#787878'}); text(times?'-:--.--':'------',208,y,{align:'r',ink:'#787878'}); } }
   if(Math.floor(stT/30)%2===0) text(touchMode?'TAP START':'PRESS START',W/2,212,{align:'c'});
 }
 function drawIntro(){
@@ -1564,8 +1684,8 @@ function drawClear(){
   text('MAP 1 CLEAR',W/2,6,{align:'c',scale:2});
   ctx.drawImage(LOGO_BIG.n,96,28);
   text('ONE PARTNER. ONE INVOICE.',W/2,104,{align:'c'}); text('ONE SOLUTION.',W/2,114,{align:'c'});
-  const rows=[['DROPS',pad0(drops,2)],['INVOICES',pad0(cuts,2)],['FLAG',pad0(flagPts,4)],['TIME BONUS',pad0(timeBonus,5)],['SCORE',pad0(score,6)]];
-  rows.forEach(([k,v],i)=>{ const y=130+i*11; text(k,32,y); text(v,224,y,{align:'r'}); });
+  const rows=[['FLUIDS',pad0(drops,2)],['INVOICES',pad0(cuts,2)],['FLAG',pad0(flagPts,4)],['TIME BONUS',pad0(timeBonus,5)],['SCORE',pad0(score,6)],['RUN TIME',fmtTime(runTime)]];
+  rows.forEach(([k,v],i)=>{ const y=128+i*10; text(k,32,y,{trim:true}); text(v,224,y,{align:'r'}); });
   text('THANKS FOR PLAYING',W/2,192,{align:'c'});
   if(stT>90 && Math.floor(stT/30)%2===0) text(touchMode?'TAP START':'PRESS START',W/2,210,{align:'c'});
 }
@@ -1573,11 +1693,16 @@ function drawOver(){
   fill('k'); ctx.fillRect(0,0,W,H); drawHUD();
   text('GAME OVER',W/2,116,{align:'c'});
 }
-function afterRun(){ if(qualifies(score)){ entry={letters:[0,0,0],pos:0,t:0}; setState('entry'); } else { newRank=-1; setState('scores'); } }
+function afterRun(){ runOn=false;
+  const qs=qualifies(score), qt=runCleared&&qualifiesTime(runTime);
+  if(qs||qt){ entry={letters:[0,0,0],pos:0,t:0,qs,qt}; setState('entry'); }
+  else { newRank=-1; newRankT=-1; showScores(0); } }
+function showScores(page){ scoresPage=page; scoresFirst=page; setState('scores'); }
 const ABC='ABCDEFGHIJKLMNOPQRSTUVWXYZ.';
 function drawEntry(){
   fill('k'); ctx.fillRect(0,0,W,H);
-  text('NEW HIGH SCORE',W/2,36,{align:'c',scale:2}); text(pad0(score,6),W/2,64,{align:'c'});
+  text(entry.qs&&entry.qt?'NEW RECORDS':entry.qs?'NEW HIGH SCORE':'NEW BEST TIME',W/2,36,{align:'c',scale:2});
+  text(entry.qs&&entry.qt?pad0(score,6)+'    '+fmtTime(runTime):entry.qs?pad0(score,6):fmtTime(runTime),W/2,64,{align:'c'});
   text('ENTER YOUR INITIALS',W/2,90,{align:'c'});
   for(let i=0;i<3;i++){ const x=W/2-40+i*28; const ch=ABC[entry.letters[i]];
     text(ch,x+3,114,{scale:2}); fill('w'); if(i===entry.pos && Math.floor(stT/12)%2===0) px(x+1,134,18,2); else if(i<entry.pos) px(x+1,134,18,1); }
@@ -1590,29 +1715,34 @@ function tickEntry(){
   if(pressed('b')&&e.pos>0){ e.pos--; SFX.select(); }
   if(pressed('a')||pressed('start')||frame-lastInput>45*60){ SFX.ping(); e.pos++; if(e.pos>2||frame-lastInput>45*60){
     const name=e.letters.map(i=>ABC[i]).join('');
-    hiscores.push([name,score]); hiscores.sort((a,b)=>b[1]-a[1]); hiscores=hiscores.slice(0,10);
-    newRank=hiscores.findIndex(h=>h[0]===name&&h[1]===score); saveHS(); setState('scores'); } }
+    newRank=e.qs?insertScore(name,score):-1; newRankT=e.qt?insertTime(name,runTime):-1;
+    if(!LB.shared()){ saveHS(); saveTimes(); }
+    LB.submit(name,score,runCleared?runTime:null);
+    showScores(e.qs?0:1); } }
 }
 
 /* ---------------- main loop ---------------- */
 let paused=false;
 function step(){
   frame++; stT++; pollInput();
+  if(runOn && !runCleared && ((state==='play'&&!paused)||state==='dying'||state==='timeup'||state==='intro')) runFrames++;
   if(noticeT>0) noticeT--;
+  if((state==='title'||state==='scores') && frame%(20*60)===30) LB.refresh();
   switch(state){
     case 'title':
       titleRunner.x+=1.2; titleRunner.anim+=0.2; if(titleRunner.x>W+40) titleRunner.x=-60;
-      if(stT>20&&(pressed('start')||pressed('a'))){ auInit(); SFX.ping(); if(menuSel===1){ menuSel=0; newRank=-1; setState('scores'); } else newGame(); }
-      else if(stT>600){ menuSel=0; setState('scores'); }
+      if(stT>20&&(pressed('start')||pressed('a'))){ auInit(); SFX.ping(); if(menuSel===1){ menuSel=0; newRank=-1; showScores(0); } else newGame(); }
+      else if(stT>600){ menuSel=0; newRank=-1; newRankT=-1; showScores(0); }
       break;
     case 'scores':
-      if(pressed('start')||pressed('a')){ auInit(); SFX.ping(); newRank=-1; newGame(); }
-      else if(stT>(newRank>=0?720:420)){ newRank=-1; setState('title'); }
+      if(pressed('start')||pressed('a')){ auInit(); SFX.ping(); newRank=-1; newRankT=-1; newGame(); }
+      else if(stT>((scoresPage===0?newRank:newRankT)>=0?600:360)){
+        if(scoresPage===0){ scoresPage=1; stT=0; } else { newRank=-1; newRankT=-1; setState('title'); } }
       break;
     case 'tally': tickTally(); break;
     case 'fireworks': tickFireworks(); break;
     case 'clear': if((stT>140&&(pressed('start')||pressed('a')))||stT>720) afterRun(); break;
-    case 'over': if(stT>240) afterRun(); break;
+    case 'over': runOn=false; if(stT>240) afterRun(); break;
     case 'entry': tickEntry(); break;
     case 'padcfg': if(stT>60*30) setState('title'); break;
     case 'intro': if(stT>150) startLevel(); break;
@@ -1656,7 +1786,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden&&state==='
 buildLevel(); P=newPlayer(3); setState('title'); requestAnimationFrame(loop);
 
 /* test hook for automated play-testing (read-only state plus a warp) */
-window.__moc={ hint(){ return hintAB; }, go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
+window.__moc={ hint(){ return hintAB; }, get run(){ return {runFrames,runOn,runCleared,runTime,jugTaken}; }, lb(){ return {mode:LB.mode,board:LB.board,scores:hiscores,times:besttimes,queue:LB.queueLen()}; }, setRun(f){ runFrames=f; }, go(s,r){ if(r!==undefined) newRank=r; if(s==='entry') entry={letters:[12,14,2],pos:1,t:0}; setState(s); }, mapRows(){ return map.map(r=>Array.isArray(r)?r.join(""):r); }, scen(){ const c=document.createElement('canvas'); c.width=300; c.height=100; const g=c.getContext('2d'); g.fillStyle=NES.sky; g.fillRect(0,0,300,100); let x=2; for(const s of [CLOUD_S,CLOUD_M,CLOUD]){ g.drawImage(s.n,x,2); x+=s.w+4; } x=2; for(const s of [BUSHES[1],BUSHES[2],BUSHES[3]]){ g.drawImage(s.n,x,96-s.h); x+=s.w+4; } g.drawImage(TREE_S.n,200,64-TREE_S.h); g.drawImage(TREE_T.n,222,64-TREE_T.h); g.drawImage(HILL.n,150,96-HILL.h); g.drawImage(HILL_S.n,236,96-HILL_S.h); g.drawImage(BOX.n,150,30); return c.toDataURL(); },
   far(){ return FAR.toDataURL(); },
   coins(){ const c=document.createElement('canvas'); c.width=60; c.height=18; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,60,18); DROP.forEach((d,i)=>g.drawImage(d.n,2+i*12,2)); g.drawImage(MINI_DROP.n,50,5); return c.toDataURL(); },
   zoom(){ const c=document.createElement('canvas'); c.width=96; c.height=34; const g=c.getContext('2d'); g.fillStyle=COL.sky; g.fillRect(0,0,96,34); g.drawImage(AEROSOL.n,4,4); g.drawImage(CONE.n,24,14); g.drawImage(PS_OUTLINED.n,44,10); g.fillStyle='#000'; g.fillRect(64,0,32,34); g.drawImage(PS_OUTLINED.n,72,10); return c.toDataURL(); },
@@ -1669,7 +1799,7 @@ window.__moc={ hint(){ return hintAB; }, go(s,r){ if(r!==undefined) newRank=r; i
     return c.toDataURL(); },
   setTime(n){ timeLeft=n; }, fw(n){ fireworksLeft=n; },
   get state(){return state;}, get P(){return P;}, get cam(){return cam;}, get score(){return score;}, get lives(){return lives;},
-  get enemies(){return enemies;}, get items(){return items;}, warp(col){ P.x=col*16+2; P.y=60; P.vy=0; cam.x=Math.max(0,Math.min(P.x-104,LW*16-W)); spawnIdx=0; while(spawnIdx<spawns.length&&spawns[spawnIdx].x*16<cam.x+40)spawnIdx++; enemies=[]; },
+  get enemies(){return enemies;}, get items(){return items;}, warp(col){ P.x=col*16+2; P.y=60; P.vy=0; cam.x=Math.max(0,Math.min(P.x-104,LW_MAIN*16-W)); P.zone=null; spawnIdx=0; while(spawnIdx<spawns.length&&spawns[spawnIdx].x*16<cam.x+40)spawnIdx++; enemies=[]; },
   step, render, solidAt:(x,y)=>solidAt(x,y), get map(){return map;}, get lifts(){return lifts;}, give(k){ if(k==='big'&&!P.big){P.big=true;P.y-=8;P.h=23;} if(k==='spray'){ if(!P.big){P.big=true;P.y-=8;P.h=23;} P.power=1;} if(k==='star')P.star=600; } };
 })();
 </script>
